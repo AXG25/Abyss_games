@@ -267,7 +267,8 @@ export function createView3D(board, G, W, opts = {}) {
   scene.add(sun);
 
   const particles = new Particles(scene);
-  const S = { THREE, scene, camera, renderer, W, objs: {}, t: 0, particles, makeWater, emojiTexture, avatarTexture, std, makeHead: (id, r) => makeHead(THREE, id, r), makeGhost: (r) => makeGhost(THREE, r) };
+  scene.add(sun.target);
+  const S = { THREE, scene, camera, renderer, board, sun, W, objs: {}, t: 0, particles, makeWater, emojiTexture, avatarTexture, std, makeHead: (id, r) => makeHead(THREE, id, r), makeGhost: (r) => makeGhost(THREE, r) };
   let shakeAmt = 0;
   S.shake = (a) => { shakeAmt = Math.min(0.08, Math.max(shakeAmt, a)); };
   S.burst = (x, y, z, o) => particles.burst(x, y, z, o);
@@ -312,7 +313,9 @@ export function createView3D(board, G, W, opts = {}) {
     const need = cfg.camFit ?? 1.06;
     const needZ = cfg.camFitZ ?? need * 0.95;
     const dist = Math.max(need / Math.tan(hf), needZ / Math.tan(vf)) * 1.05;
-    camBase.set(0, Math.sin(elev) * dist, Math.cos(elev) * dist + (cfg.camShift ?? 0.12));
+    const yaw = ((cfg.camYaw ?? 0) * Math.PI) / 180;
+    const back = Math.cos(elev) * dist + (cfg.follow ? 0 : (cfg.camShift ?? 0.12));
+    camBase.set(Math.sin(yaw) * back, Math.sin(elev) * dist, Math.cos(yaw) * back);
     camera.updateProjectionMatrix();
     particles.mat.uniforms.uScale.value = renderer.domElement.height / (2 * Math.tan(vf));
   };
@@ -345,6 +348,25 @@ export function createView3D(board, G, W, opts = {}) {
       camera.position.x += (Math.random() - 0.5) * shakeAmt;
       camera.position.y += (Math.random() - 0.5) * shakeAmt;
       shakeAmt *= Math.pow(0.02, dt);
+    }
+    // cámara que sigue a mi jugador (carreras): mira un poco hacia adelante
+    if (cfg.follow) {
+      const me = ents.find((e) => e.id === opts.meId);
+      if (me) {
+        const ah = cfg.lookAhead ? cfg.lookAhead(me) : { x: 0, y: 0 };
+        const tx = me.x + ah.x, tz = me.y + ah.y;
+        if (!S.fol) S.fol = { x: tx, z: tz };
+        const k = 1 - Math.pow(0.004, dt);
+        S.fol.x += (tx - S.fol.x) * k;
+        S.fol.z += (tz - S.fol.z) * k;
+      }
+      if (S.fol) {
+        camera.position.x += S.fol.x;
+        camera.position.z += S.fol.z;
+        look.set(S.fol.x, 0, S.fol.z);
+        sun.position.set(S.fol.x + 1.4, 3.2, S.fol.z + 1.2);
+        sun.target.position.set(S.fol.x, 0, S.fol.z);
+      }
     }
     camera.lookAt(look);
 

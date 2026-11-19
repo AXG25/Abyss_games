@@ -174,6 +174,7 @@ const STYLES = {
   happy: { root: 'G', minor: false, prog: [0, 5, 3, 4], bpm: 140, lead: 'triangle', pattern: [0, 2, 4, 7, 4, 2, 0, 4] },
   battle: { root: 'A', minor: true, prog: [0, 5, 6, 4], bpm: 160, lead: 'sawtooth', pattern: [0, 7, 3, 7, 0, 7, 5, 7] },
   tense: { root: 'C', minor: true, prog: [0, 1, 0, 6], bpm: 120, lead: 'square', pattern: [0, 3, 6, 3, 0, 3, 6, 9] },
+  race: { root: 'E', minor: false, prog: [0, 4, 5, 3], bpm: 172, lead: 'sawtooth', pattern: [0, 4, 7, 4, 9, 7, 4, 7] },
   ice: { root: 'B', minor: true, prog: [0, 5, 3, 6], bpm: 128, lead: 'triangle', pattern: [0, 4, 7, 11, 7, 4, 0, 7] },
 };
 const MAJ = [0, 2, 4, 5, 7, 9, 11];

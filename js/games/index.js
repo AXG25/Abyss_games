@@ -13,6 +13,7 @@ import coins from './coins.js';
 import sumo from './sumo.js';
 import hotbomb from './hotbomb.js';
 import ice from './ice.js';
+import race from './race.js';
 
-export const GAMES = [kraken, bombs, tiles, coins, sumo, hotbomb, ice, tap, reflex, count, memory, stopwatch];
+export const GAMES = [race, kraken, bombs, tiles, coins, sumo, hotbomb, ice, tap, reflex, count, memory, stopwatch];
 export const GAME_BY_ID = Object.fromEntries(GAMES.map((g) => [g.id, g]));

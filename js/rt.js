@@ -303,7 +303,7 @@ export function mountRT(el, ctx, G) {
   let tempoUp = false;
   const ents0 = () => [me, ...bots.map((b) => b.p), ...ext.remote || []];
   const fx = {
-    sfx, say, me,
+    sfx, say, me, msg: (t, ms) => showMsg(t, ms),
     burst: (x, y, z, o) => v3 && v3.burst(x, y, z, o),
     shake: (a) => v3 && v3.shake(a),
     // volumen según la distancia a mi jugador
@@ -361,6 +361,7 @@ export function mountRT(el, ctx, G) {
         ix = (keys.has('ArrowRight') || keys.has('d') ? 1 : 0) - (keys.has('ArrowLeft') || keys.has('a') ? 1 : 0);
         iy = (keys.has('ArrowDown') || keys.has('s') ? 1 : 0) - (keys.has('ArrowUp') || keys.has('w') ? 1 : 0);
       }
+      if (G.inputYaw) { const c = Math.cos(G.inputYaw), sn = Math.sin(G.inputYaw); [ix, iy] = [ix * c + iy * sn, -ix * sn + iy * c]; }
       const ev = G.step(me, { x: ix, y: iy }, simT, W, ext);
       if (ev && SOUNDS[ev]) SOUNDS[ev](G);
       if (ev && v3 && FX_ME[ev]) FX_ME[ev](v3, me);
@@ -381,8 +382,8 @@ export function mountRT(el, ctx, G) {
       // fin anticipado: queda uno solo (lo decide el anfitrión)
       if (ctx.isHost && !overSent) {
         const alive = ext.all.filter((e) => !e.out).length;
-        // termina si cayeron todos, o si queda uno solo (con 2+ jugadores)
-        if (alive === 0 || (players.length > 1 && alive <= 1)) { overSent = true; ext.over = true; setTimeout(() => ctx.endEarly && ctx.endEarly(), 300); }
+        // termina si cayeron todos, o si queda uno solo (con 2+ jugadores); o la regla del juego
+        if (G.over ? G.over(ext.all, simT) : (alive === 0 || (players.length > 1 && alive <= 1))) { overSent = true; ext.over = true; setTimeout(() => ctx.endEarly && ctx.endEarly(), 300); }
       }
       if (ext.over) break;
       simT += DT;

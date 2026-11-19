@@ -448,3 +448,6 @@ input:focus { border-color: var(--yellow); }
 .code-box .share svg { width: 20px; height: 20px; }
 .keep-open { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; }
 .keep-open svg { width: 18px; height: 18px; flex: none; }
+
+/* --- Gran Premio --- */
+.race-mini { position: absolute; top: 8px; left: 8px; width: 108px; height: 108px; border-radius: 50%; background: rgba(27, 16, 53, 0.45); box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.35); pointer-events: none; z-index: 3; }

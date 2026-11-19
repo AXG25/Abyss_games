@@ -20,7 +20,6 @@ const seqFor = (seed) => {
 export default {
   id: 'memory',
   name: 'Simón dice',
-  emoji: '🧠',
   desc: `Memoriza la secuencia de ${LEN} colores y repítela tocando los botones. ¡Gana quien acierte más y más rápido!`,
   dur: () => SHOW + INPUT,
 
@@ -28,7 +27,7 @@ export default {
     const seq = seqFor(ctx.seed);
     el.innerHTML = `
       <div class="g-mem">
-        <div class="g-mem-msg">👀 Mira bien…</div>
+        <div class="g-mem-msg">Mira bien…</div>
         <div class="g-mem-pads">${PADS.map((p, i) => `<button data-i="${i}" style="--c:${p.c}"></button>`).join('')}</div>
         <div class="g-mem-dots">${seq.map(() => '<i></i>').join('')}</div>
       </div>`;
@@ -48,11 +47,11 @@ export default {
     seq.forEach((i, k) => timers.push(setTimeout(() => flash(i), LEAD + k * STEP)));
     timers.push(setTimeout(() => {
       inputAt = performance.now();
-      msg.textContent = '👉 ¡Tu turno!';
+      msg.textContent = '¡Tu turno!';
       el.querySelector('.g-mem').classList.add('input');
     }, SHOW));
     timers.push(setTimeout(() => {
-      if (!done) { done = true; msg.textContent = '⏰ ¡Tiempo!'; }
+      if (!done) { done = true; msg.textContent = '¡Tiempo!'; }
     }, SHOW + INPUT));
 
     el.querySelector('.g-mem-pads').addEventListener('pointerdown', (e) => {
@@ -66,11 +65,11 @@ export default {
         dots[pos].className = 'ok';
         pos++;
         ctx.submit({ ok: pos, t });
-        if (pos === LEN) { done = true; msg.textContent = '🎉 ¡Perfecto!'; buzz(40); }
+        if (pos === LEN) { done = true; msg.textContent = '¡Perfecto!'; buzz(40); }
       } else {
         done = true;
         dots[pos].className = 'bad';
-        msg.textContent = `❌ Fallaste en el ${pos + 1}`;
+        msg.textContent = `Fallaste en el ${pos + 1}`;
         beep(140, 0.3, 'sawtooth');
         buzz(200);
         ctx.submit({ ok: pos, t });

@@ -26,7 +26,7 @@ const VALID = Array.from({ length: N * N }, (_, k) => { const [x, y] = center(k)
 export const G = {
   TOTAL, LIVES: 1, lives: 1,
   action: null,
-  fallText: '🥶 ¡Al agua helada!',
+  fallText: '{splash} ¡Al agua helada!',
 
   world() { return {}; },
   newExt: () => ({ taken: new Set(), tiles: new Map() }), // tile → instante en que se pisó
@@ -123,7 +123,7 @@ export const G = {
     if (p.fall > 0 || p.out) o.f = Math.round((p.out ? 0 : p.scale) * 100) / 100;
     return o;
   },
-  hud: (p) => (p.out ? '👻' : '⛸️'),
+  hud: (p) => (p.out ? '{ghost}' : '{heart}'),
 
   music: 'ice',
   events(t0, t1, W, ext, ents, fx) {
@@ -253,14 +253,13 @@ export const G = {
 export default {
   id: 'ice',
   name: 'Hielo frágil',
-  emoji: '🧊',
   realtime: true,
   desc: 'Cada bloque de hielo que pisas se agrieta y se hunde al segundo. ¡No te quedes quieto y no te encierres! Gana el último que siga sobre el hielo.',
   dur: () => TOTAL * 1000,
   mount: (el, ctx) => mountRT(el, ctx, { ...G, endWhenOneLeft: true }),
   evaluate(v) {
     const ev = evalSurvival(v, TOTAL, 1);
-    if (ev && ev.score >= 1e6) ev.label = '🏆 ¡último en pie!';
+    if (ev && ev.score >= 1e6) ev.label = '{trophy} ¡último en pie!';
     return ev;
   },
   bot: (r, seed, p) => simulateBot(G, seed, Number(String(p?.id || 'bot0').slice(3)) || 0),

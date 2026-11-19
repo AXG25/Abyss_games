@@ -3,6 +3,7 @@
 // teléfonos solo leen `st` y envían sus resultados en su propia `presence.in`.
 import { GAMES, GAME_BY_ID } from './games/index.js';
 import { mulberry32, shuffle, BOT_NAMES, BOT_AVATARS } from './util.js';
+import { validAvatar } from './icons.js';
 
 export const MAX_PLAYERS = 4;
 // Id del jugador: el `uid` que cada teléfono pone en su presence (estable si se
@@ -57,7 +58,7 @@ export class Host {
         pl.push({
           id: pid(h),
           n: String(h.presence.name).slice(0, 14),
-          a: String(h.presence.av || '🙂').slice(0, 8),
+          a: validAvatar(h.presence.av),
           s: old[h.peer]?.s || 0,
         });
       }

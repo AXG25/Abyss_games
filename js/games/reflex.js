@@ -5,7 +5,6 @@ const waitFor = (seed) => 1500 + mulberry32(seed)() * 3500;
 export default {
   id: 'reflex',
   name: 'Reflejos de vaquero',
-  emoji: '🤠',
   desc: 'Espera a que la pantalla se ponga VERDE y toca lo más rápido posible. ¡Si tocas antes, pierdes!',
   dur: (seed) => waitFor(seed) + 2500,
 
@@ -36,7 +35,7 @@ export default {
       if (!goAt) {
         pad.className = 'g-reflex fail';
         txt.textContent = '¡Muy pronto!';
-        sub.textContent = 'falta 🚫';
+        sub.textContent = 'falta';
         ctx.submit({ f: 1 });
         beep(140, 0.3, 'sawtooth');
         buzz(200);
@@ -55,8 +54,8 @@ export default {
 
   evaluate(v) {
     if (!v) return null;
-    if (v.f) return { score: null, label: 'Falta 🚫' };
-    if (typeof v.ms !== 'number' || v.ms < 80) return { score: null, label: 'Falta 🚫' };
+    if (v.f) return { score: null, label: '{cross} Falta' };
+    if (typeof v.ms !== 'number' || v.ms < 80) return { score: null, label: '{cross} Falta' };
     return { score: -v.ms, label: `${Math.round(v.ms)} ms` };
   },
 

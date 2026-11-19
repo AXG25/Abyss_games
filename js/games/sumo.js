@@ -15,7 +15,7 @@ const radiusAt = (t) => Math.max(0.5, 0.9 - Math.max(0, t - 8) * 0.0135);
 const G = {
   TOTAL, LIVES, lives: LIVES, PR,
   action: '¡ATACA!',
-  fallText: '💫 ¡Fuera del estadio!',
+  fallText: '{sparkle} ¡Fuera del estadio!',
   music: 'battle',
 
   world() { return {}; },
@@ -135,7 +135,7 @@ const G = {
 
   banner(t) {
     if (t < 1.2) return { text: '3, 2, 1… ¡LANZA!', color: '#f72585' };
-    if (t > 8 && t < 9.6) return { text: '⚠️ ¡El estadio se encoge!', color: '#7209b7' };
+    if (t > 8 && t < 9.6) return { text: '{warn} ¡El estadio se encoge!', color: '#7209b7' };
     return null;
   },
 
@@ -266,7 +266,7 @@ const G = {
       speedRing.rotation.x = Math.PI / 2;
       speedRing.position.y = 1.0 * U;
       root.add(speedRing);
-      const face = new THREE.Sprite(new THREE.SpriteMaterial({ map: S.emojiTexture(e.a || '🙂'), transparent: true, depthWrite: false }));
+      const face = new THREE.Sprite(new THREE.SpriteMaterial({ map: S.avatarTexture(e.a || 'frog'), transparent: true, depthWrite: false }));
       face.scale.set(1.3 * U, 1.3 * U, 1);
       face.renderOrder = 3;
       root.add(face);
@@ -309,7 +309,6 @@ const G = {
 export default {
   id: 'sumo',
   name: 'Trompos de batalla',
-  emoji: '🌀',
   realtime: true,
   desc: '¡Eres un trompo de combate! Choca contra los demás y usa ¡ATACA! para embestirlos y sacarlos del estadio, que se va encogiendo. 3 vidas.',
   dur: () => TOTAL * 1000,

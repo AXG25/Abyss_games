@@ -276,3 +276,32 @@ input:focus { border-color: var(--yellow); }
 .k-msg, .k-banner { z-index: 3; }
 .gfx { align-self: center; }
 .mute { background: rgba(255, 255, 255, 0.12); border-radius: 99px; width: 38px; height: 38px; font-size: 18px; margin-left: auto; margin-right: 8px; }
+
+/* --- iconos propios --- */
+.ic { width: 1.15em; height: 1.15em; display: inline-block; vertical-align: -0.2em; flex: 0 0 auto; }
+.ic.huge { width: 96px; height: 96px; }
+.gi { width: 44px; height: 44px; display: inline-block; vertical-align: middle; }
+.gi.sm { width: 1.4em; height: 1.4em; vertical-align: -0.35em; }
+.gi.big { width: 110px; height: 110px; filter: drop-shadow(0 6px 0 rgba(0, 0, 0, 0.3)); }
+.avatar { width: 100%; height: 100%; display: block; }
+.av { padding: 4px; }
+.av .avatar { width: 100%; height: 100%; }
+.slot-av { width: 64px; height: 64px; display: block; filter: drop-shadow(0 3px 0 rgba(0, 0, 0, 0.25)); }
+.chip-av { width: 30px; height: 30px; background: rgba(255, 255, 255, 0.35); padding: 2px; }
+.r-av { width: 40px; height: 40px; flex: 0 0 auto; }
+.bar-av { width: 28px; height: 28px; flex: 0 0 auto; }
+.pod-av { width: 64px; height: 64px; }
+.game-card { position: relative; }
+.game-card .gi { width: 52px; height: 52px; }
+.rt-tag { position: absolute; top: 6px; right: 8px; font-style: normal; font-size: 11px; background: var(--pink); padding: 1px 6px; border-radius: 99px; }
+.g-count-q .ic { width: 42px; height: 42px; vertical-align: -10px; }
+.g-field span { width: 38px; height: 38px; }
+.g-field span .ic { width: 38px; height: 38px; }
+.k-hud .ic { width: 26px; height: 26px; }
+.k-msg .ic, .k-banner .ic, .k-top .ic { width: 1em; height: 1em; }
+.btn .ic { width: 1.1em; height: 1.1em; }
+.mute { display: grid; place-items: center; }
+.mute .ic { width: 22px; height: 22px; }
+.medal .ic { width: 30px; height: 30px; }
+.r-pts .ic, .slot-score .ic { width: 1em; height: 1em; }
+.toast .ic { width: 1em; height: 1em; }

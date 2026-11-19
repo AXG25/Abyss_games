@@ -148,8 +148,8 @@ export const G = {
   result: (p) => ({ h: Math.max(0, p.h), t: p.out ? Math.round(p.tOut * 1000) : TOTAL * 1000 }),
 
   banner(t) {
-    if (t > 12 && t < 13.8) return { text: '⚠️ ¡Tentáculo corto! Ve al borde', color: '#ff4d6d' };
-    if (t > 26 && t < 27.8) return { text: '⚠️ ¡El kraken se enoja!', color: '#7b2cbf' };
+    if (t > 12 && t < 13.8) return { text: '{warn} ¡Tentáculo corto! Ve al borde', color: '#ff4d6d' };
+    if (t > 26 && t < 27.8) return { text: '{warn} ¡El kraken se enoja!', color: '#7b2cbf' };
     return null;
   },
 
@@ -318,7 +318,6 @@ export const G = {
 export default {
   id: 'kraken',
   name: 'Kraken en cubierta',
-  emoji: '🐙',
   realtime: true,
   desc: '¡El kraken atacó el barco! Muévete con el joystick y SALTA los tentáculos morados. Los rosados solo llegan a la mitad: aléjate hacia el borde. Tienes 3 vidas.',
   dur: () => TOTAL * 1000,

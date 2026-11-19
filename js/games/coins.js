@@ -85,12 +85,12 @@ const G = {
 
   result: (p) => ({ s: p.s }),
   pack: (p) => ({ g: p.got.slice(-40), s: p.s }),
-  hud: (p) => `🪙 ${p.s}`,
+  hud: (p) => `{coin} ${p.s}`,
   hudRight: (ents) => {
     const best = ents.reduce((m, e) => Math.max(m, (e.e && e.e.s) || e.s || 0), 0);
-    return `👑 ${best}`;
+    return `{crown} ${best}`;
   },
-  endText: (p) => `🪙 ¡${p.s} monedas!`,
+  endText: (p) => `{coin} ¡${p.s} monedas!`,
 
   music: 'happy',
   events(t0, t1, W, ext, ents, fx) {
@@ -212,7 +212,6 @@ const G = {
 export default {
   id: 'coins',
   name: 'Fiebre de monedas',
-  emoji: '🪙',
   realtime: true,
   desc: '¡Llueven monedas! Recoge todas las que puedas en 30 segundos. Las grandes valen 5. Usa ACELERA para ganarle a los demás.',
   dur: () => TOTAL * 1000,

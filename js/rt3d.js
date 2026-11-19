@@ -6,6 +6,7 @@
 // Este módulo pone cámara (con entrada épica y sacudidas), luces, sombras,
 // partículas y los personajes animados (caminar, saltar, golpe, impulso, caída).
 import * as THREE from '../vendor/three.module.min.js';
+import { avatarImage } from './icons.js';
 
 export { THREE };
 
@@ -40,6 +41,21 @@ export function emojiTexture(txt, opts = {}) {
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   texCache.set(key, tex);
+  return tex;
+}
+
+ // Textura de la cara de un personaje (dibujado en SVG).
+const avTex = new Map();
+export function avatarTexture(id) {
+  if (avTex.has(id)) return avTex.get(id);
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  const img = avatarImage(id);
+  const draw = () => { c.getContext('2d').drawImage(img, 0, 0, 256, 256); tex.needsUpdate = true; };
+  if (img.complete && img.naturalWidth) draw(); else img.addEventListener('load', draw, { once: true });
+  avTex.set(id, tex);
   return tex;
 }
 
@@ -210,11 +226,11 @@ function makeCharacter(e, PR) {
   });
   // cabeza: esfera de color con el emoji como cara (siempre mirando a la cámara)
   const headY = hipY + 1.75 * U;
-  const head = cast(new THREE.Mesh(new THREE.SphereGeometry(0.62 * U, 18, 14), mLight));
+  const head = cast(new THREE.Mesh(new THREE.SphereGeometry(0.5 * U, 18, 14), mLight));
   head.position.y = headY;
   rig.add(head);
-  const face = new THREE.Sprite(new THREE.SpriteMaterial({ map: emojiTexture(e.a || '🙂'), transparent: true, depthWrite: false }));
-  face.scale.set(1.3 * U, 1.3 * U, 1);
+  const face = new THREE.Sprite(new THREE.SpriteMaterial({ map: avatarTexture(e.a || 'frog'), transparent: true, depthWrite: false }));
+  face.scale.set(1.75 * U, 1.75 * U, 1);
   face.position.y = headY + 0.02 * U;
   face.renderOrder = 3;
   root.add(face);
@@ -250,7 +266,7 @@ export function createView3D(board, G, W, opts = {}) {
   scene.add(sun);
 
   const particles = new Particles(scene);
-  const S = { THREE, scene, camera, renderer, W, objs: {}, t: 0, particles, emojiTexture, std };
+  const S = { THREE, scene, camera, renderer, W, objs: {}, t: 0, particles, emojiTexture, avatarTexture, std };
   let shakeAmt = 0;
   S.shake = (a) => { shakeAmt = Math.min(0.08, Math.max(shakeAmt, a)); };
   S.burst = (x, y, z, o) => particles.burst(x, y, z, o);
@@ -364,7 +380,7 @@ export function createView3D(board, G, W, opts = {}) {
       // ---- fantasma
       if (ghost !== a.ghost) {
         a.ghost = ghost;
-        a.face.material.map = emojiTexture(ghost ? '👻' : e.a || '🙂');
+        a.face.material.map = avatarTexture(ghost ? 'ghost' : e.a || 'frog');
         a.face.material.opacity = ghost ? 0.55 : 1;
         a.face.material.needsUpdate = true;
         a.rig.visible = !ghost;

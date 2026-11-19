@@ -1,13 +1,15 @@
 import { mulberry32, shuffle, beep, buzz } from '../util.js';
+import { icon } from '../icons.js';
 
 const VIEW = 4500;
 const ANSWER = 6000;
+// figura objetivo y figuras para distraer (iconos propios)
 const SETS = [
-  ['🍄', ['🌸', '🍓', '🌼', '🍒']],
-  ['⭐', ['🌙', '☀️', '🪐', '☁️']],
-  ['🐟', ['🐠', '🐡', '🦐', '🦀']],
-  ['🍌', ['🍋', '🌽', '🧀', '🥐']],
-  ['👻', ['💀', '👽', '🤡', '🎃']],
+  ['mushroom', ['flower', 'apple', 'leaf', 'heart']],
+  ['star', ['moon', 'cloud', 'sparkle', 'diamond']],
+  ['fish', ['drop', 'leaf', 'cloud', 'diamond']],
+  ['apple', ['heart', 'flower', 'mushroom', 'coin']],
+  ['ghost', ['cloud', 'moon', 'bomb', 'drop']],
 ];
 
 // Genera el tablero a partir de la semilla (igual en todos los teléfonos).
@@ -30,7 +32,6 @@ function board(seed) {
 export default {
   id: 'count',
   name: 'Cuenta rápida',
-  emoji: '🔢',
   desc: 'Mira el tablero y cuenta el emoji objetivo. Luego elige la respuesta correcta lo más rápido posible.',
   dur: () => VIEW + ANSWER,
 
@@ -39,8 +40,8 @@ export default {
     el.innerHTML = `
       <div class="g-count">
         <div class="g-bar"><i></i></div>
-        <div class="g-count-q">¿Cuántos <span>${b.target}</span> hay?</div>
-        <div class="g-field">${b.placed.map((p) => `<span style="left:${p.x}%;top:${p.y}%;transform:rotate(${p.rot}deg) scale(${p.s})">${p.e}</span>`).join('')}</div>
+        <div class="g-count-q">¿Cuántos <span>${icon(b.target)}</span> hay?</div>
+        <div class="g-field">${b.placed.map((p) => `<span style="left:${p.x}%;top:${p.y}%;transform:rotate(${p.rot}deg) scale(${p.s})">${icon(p.e)}</span>`).join('')}</div>
         <div class="g-opts" hidden>${b.opts.map((o) => `<button data-v="${o}">${o}</button>`).join('')}</div>
       </div>`;
     const field = el.querySelector('.g-field');
@@ -85,8 +86,8 @@ export default {
     if (!v || typeof v.a !== 'number') return null;
     const n = board(seed).n;
     const t = Math.max(0, Math.min(ANSWER, Number(v.t) || ANSWER));
-    if (v.a === n) return { score: 100000 - t, label: `✔ ${(t / 1000).toFixed(1)} s` };
-    return { score: -Math.abs(v.a - n) * 10000 - t, label: `✘ dijo ${v.a}` };
+    if (v.a === n) return { score: 100000 - t, label: `{check} ${(t / 1000).toFixed(1)} s` };
+    return { score: -Math.abs(v.a - n) * 10000 - t, label: `{cross} dijo ${v.a}` };
   },
 
   bot(r, seed) {

@@ -18,6 +18,7 @@
 //   opcionales: pack(p) → datos extra en red, hud(p), banner(t, W), sounds
 import { beep, buzz } from './util.js';
 import { sfx, say, music, stopMusic, musicTempo } from './audio.js';
+import { avatarImage, rich } from './icons.js';
 
 export const DT = 1 / 60;
 export const TAU = Math.PI * 2;
@@ -91,10 +92,10 @@ export function drawPlayer(g, v, e, meId, t) {
   g.fillStyle = e.c;
   g.fill();
   if (e.id === meId) { g.lineWidth = 3; g.strokeStyle = '#fff'; g.stroke(); }
-  g.font = `${Math.round(pr * 1.5)}px system-ui, 'Apple Color Emoji', 'Segoe UI Emoji'`;
+  const img = avatarImage(e.out ? 'ghost' : e.a);
+  if (img.complete && img.naturalWidth) g.drawImage(img, px - pr * 1.1, py - pr * 1.1, pr * 2.2, pr * 2.2);
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.fillText(e.out ? '👻' : e.a, px, py + 1);
   if (e.tag !== undefined) {
     g.font = `bold ${Math.round(pr * 0.9)}px system-ui`;
     g.fillStyle = '#fff';
@@ -256,7 +257,7 @@ export function mountRT(el, ctx, G) {
   };
 
   const showMsg = (txt, ms = 1200) => {
-    msg.textContent = txt;
+    msg.innerHTML = rich(txt);
     msg.hidden = false;
     clearTimeout(showMsg.t);
     if (ms) showMsg.t = setTimeout(() => { msg.hidden = true; }, ms);
@@ -319,10 +320,10 @@ export function mountRT(el, ctx, G) {
       const ev = G.step(me, { x: ix, y: iy }, simT, W, ext);
       if (ev && SOUNDS[ev]) SOUNDS[ev](G);
       if (ev && v3 && FX_ME[ev]) FX_ME[ev](v3, me);
-      if (ev === 'hit') showMsg('¡Ay! 💥', 700);
-      if (ev === 'fall') showMsg(G.fallText || '¡Al agua! 🌊', 900);
-      if (ev === 'got') showMsg('💣 ¡Tienes la bomba!', 900);
-      if (ev === 'out') { showMsg('👻 ¡Eliminado!', 0); submit(); }
+      if (ev === 'hit') showMsg('{bolt} ¡Auch!', 700);
+      if (ev === 'fall') showMsg(G.fallText || '{splash} ¡Al agua!', 900);
+      if (ev === 'got') showMsg('{bomb} ¡Tienes la bomba!', 900);
+      if (ev === 'out') { showMsg('{ghost} ¡Eliminado!', 0); submit(); }
       for (const b of bots) {
         const wasOut = b.p.out;
         G.step(b.p, b.brain(b.p, simT, ext), simT, W, ext);
@@ -330,13 +331,13 @@ export function mountRT(el, ctx, G) {
       }
       if (G.applyHost && ext.hs) {
         const e2 = G.applyHost(me, ext.hs, simT);
-        if (e2 === 'out') { SOUNDS.out(); showMsg('👻 ¡Eliminado!', 0); submit(); }
+        if (e2 === 'out') { SOUNDS.out(); showMsg('{ghost} ¡Eliminado!', 0); submit(); }
         for (const b of bots) { const w = b.p.out; G.applyHost(b.p, ext.hs, simT); if (b.p.out && !w) saveBot(b); }
       }
       // fin anticipado: queda uno solo (lo decide el anfitrión)
-      if (ctx.isHost && G.endWhenOneLeft && !overSent && players.length > 1) {
+      if (ctx.isHost && !overSent) {
         const alive = ext.all.filter((e) => !e.out).length;
-        if (alive <= 1) { overSent = true; ext.over = true; setTimeout(() => ctx.endEarly && ctx.endEarly(), 300); }
+        if (alive === 0 || (G.endWhenOneLeft && players.length > 1 && alive <= 1)) { overSent = true; ext.over = true; setTimeout(() => ctx.endEarly && ctx.endEarly(), 300); }
       }
       if (ext.over) break;
       simT += DT;
@@ -351,7 +352,7 @@ export function mountRT(el, ctx, G) {
     if ((simT >= G.TOTAL || ext.over) && !finished) {
       finished = true;
       stopMusic();
-      if (!me.out) { showMsg(G.endText ? G.endText(me) : ext.over ? '🏆 ¡Quedaste en pie!' : '🎉 ¡Sobreviviste!', 0); sfx.win(); if (v3) v3.burst(me.x, 0.3, me.y, { n: 60, color: ['#ffd60a', '#ff4d6d', '#3a86ff', '#06d6a0', '#ffffff'], speed: 1, up: 2, size: 0.05, life: 1.6, gravity: 2.5 }); }
+      if (!me.out) { showMsg(G.endText ? G.endText(me) : ext.over ? '{trophy} ¡Quedaste en pie!' : '{trophy} ¡Sobreviviste!', 0); sfx.win(); if (v3) v3.burst(me.x, 0.3, me.y, { n: 60, color: ['#ffd60a', '#ff4d6d', '#3a86ff', '#06d6a0', '#ffffff'], speed: 1, up: 2, size: 0.05, life: 1.6, gravity: 2.5 }); }
       for (const b of bots) saveBot(b);
       submit();
     }
@@ -374,22 +375,24 @@ export function mountRT(el, ctx, G) {
       ents.push({ ...e, x: s.x, y: s.y, z: s.z, c: colorOf[e.id], a: avOf[e.id] });
     }
     for (const b of bots) ents.push({ id: b.id, ...b.p, e: G.pack ? G.pack(b.p) : null, c: colorOf[b.id], a: avOf[b.id] });
-    ents.push({ id: ctx.me, ...me, e: G.pack ? G.pack(me) : null, c: ctx.color, a: avOf[ctx.me] || '🙂' });
+    ents.push({ id: ctx.me, ...me, e: G.pack ? G.pack(me) : null, c: ctx.color, a: avOf[ctx.me] || 'frog' });
     ents.sort((a, b) => (a.z || 0) - (b.z || 0));
     const tDraw = Math.min(simT, G.TOTAL - DT);
     if (v3) v3.render(tDraw, ents, ext, ctx.me);
     else G.draw(g, view, tDraw, W, ents, ctx.me, ext);
     const top = G.topText ? G.topText(tDraw, W, ext) : null;
-    if ((top || '') !== (topEl.textContent || '') || !!top === topEl.hidden) { topEl.hidden = !top; topEl.textContent = top || ''; topEl.classList.toggle('danger', !!(top && top.danger)); }
-    livesEl.textContent = G.hud ? G.hud(me) : me.out ? '👻' : '❤️'.repeat(Math.max(0, me.h)) + '🖤'.repeat(Math.max(0, G.lives - me.h));
+    if ((top || '') !== (topEl.dataset.t || '') || !!top === topEl.hidden) { topEl.hidden = !top; topEl.innerHTML = rich(top || ''); topEl.dataset.t = top || ''; topEl.classList.toggle('danger', !!(top && top.danger)); }
+    const hudL = G.hud ? G.hud(me) : me.out ? '{ghost}' : '{heart}'.repeat(Math.max(0, me.h)) + '{heartEmpty}'.repeat(Math.max(0, G.lives - me.h));
+    if (hudL !== livesEl.dataset.t) { livesEl.dataset.t = hudL; livesEl.innerHTML = rich(hudL); }
     timeEl.textContent = Math.max(0, Math.ceil(G.TOTAL - simT));
-    aliveEl.textContent = G.hudRight ? G.hudRight(ents) : `🧍 ${ents.filter((e) => !e.out).length}`;
+    const hudR = G.hudRight ? G.hudRight(ents) : `{people} ${ents.filter((e) => !e.out).length}`;
+    if (hudR !== aliveEl.dataset.t) { aliveEl.dataset.t = hudR; aliveEl.innerHTML = rich(hudR); }
     const bn = G.banner ? G.banner(tDraw, W) : null;
     const key = bn ? bn.text + bn.color : '';
     if (key !== lastBanner) {
       lastBanner = key;
       banner.hidden = !bn;
-      if (bn) { banner.textContent = bn.text; banner.style.background = bn.color; beep(660, 0.1, 'triangle'); }
+      if (bn) { banner.innerHTML = rich(bn.text); banner.style.background = bn.color; beep(660, 0.1, 'triangle'); }
     }
     raf = requestAnimationFrame(frame);
   };
@@ -412,6 +415,6 @@ export function evalSurvival(v, TOTAL, LIVES) {
   if (!v || typeof v.t !== 'number') return null;
   const h = Math.max(0, Math.min(LIVES, Math.floor(v.h) || 0));
   const t = Math.max(0, Math.min(TOTAL * 1000, v.t));
-  if (t >= TOTAL * 1000 && h > 0) return { score: 1e6 + h * 1e5, label: `${'❤️'.repeat(h)} ¡sobrevivió!` };
+  if (t >= TOTAL * 1000 && h > 0) return { score: 1e6 + h * 1e5, label: `${'{heart}'.repeat(h)} ¡sobrevivió!` };
   return { score: t, label: `cayó a los ${(t / 1000).toFixed(1)} s` };
 }

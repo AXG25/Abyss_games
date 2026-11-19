@@ -7,7 +7,6 @@ const MAX = 10000;
 export default {
   id: 'stopwatch',
   name: 'Para en 5.00',
-  emoji: '⏱️',
   desc: 'El cronómetro arranca y se esconde. Toca PARAR cuando creas que van exactamente 5.00 segundos.',
   dur: () => MAX,
 

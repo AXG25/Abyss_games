@@ -53,10 +53,12 @@ const G = {
       hs.lt = t;
       return;
     }
-    if (t - hs.lt < 0.7) return; // no se puede devolver al instante
+    if (t - hs.lt < 0.5) return; // medio segundo de gracia tras cada pase
     for (const o of alive) {
       if (o.id === holder.id) continue;
-      if (Math.hypot(o.x - holder.x, o.y - holder.y) < PR * 2.1) {
+      // no se le puede devolver al que te la acaba de pasar (hasta 1.8 s después)
+      if (o.id === hs.from && t - hs.lt < 1.8) continue;
+      if (Math.hypot(o.x - holder.x, o.y - holder.y) < PR * 2.3) {
         hs.h = o.id;
         hs.lt = t;
         hs.from = holder.id;
@@ -80,6 +82,33 @@ const G = {
     const hs = ext && ext.hs;
     const has = hs && hs.h === p.id;
     moveBasic(p, inp, has ? 0.72 : 0.64);
+    // empujón al pasar la bomba: los dos salen despedidos en direcciones opuestas
+    if (hs && hs.lt !== p._lt) {
+      p._lt = hs.lt;
+      const other = hs.h === p.id ? hs.from : hs.from === p.id ? hs.h : null;
+      const o = other && ext.all ? ext.all.find((e) => e && e.id === other) : null;
+      if (o) {
+        let dx = p.x - o.x, dy = p.y - o.y;
+        const d = Math.hypot(dx, dy) || 1;
+        if (d < 0.01) { dx = Math.cos(t * 7); dy = Math.sin(t * 7); }
+        p.kx = (dx / Math.max(d, 0.01)) * 1.6;
+        p.ky = (dy / Math.max(d, 0.01)) * 1.6;
+      }
+    }
+    if (p.kx || p.ky) {
+      p.x += p.kx * DT; p.y += p.ky * DT;
+      const f = Math.pow(0.02, DT);
+      p.kx *= f; p.ky *= f;
+      if (Math.abs(p.kx) + Math.abs(p.ky) < 0.02) { p.kx = 0; p.ky = 0; }
+    }
+    // los cuerpos no se enciman
+    if (ext && ext.all) {
+      for (const o of ext.all) {
+        if (!o || o === p || o.id === p.id || o.out || (hs && hs.outs && hs.outs[o.id] !== undefined)) continue;
+        const dx = p.x - o.x, dy = p.y - o.y, d = Math.hypot(dx, dy);
+        if (d > 0 && d < PR * 2) { const over = PR * 2 - d; p.x += (dx / d) * over * 0.5; p.y += (dy / d) * over * 0.5; }
+      }
+    }
     clampBox(p, HALF - PR);
     if (has && !p._had) { p._had = true; return 'got'; }
     if (!has) p._had = false;
@@ -97,8 +126,10 @@ const G = {
       const alive = ext.all.filter((e) => e && !e.out && e.id !== p.id && !(hs.outs && hs.outs[e.id] !== undefined));
       if (!alive.length) return { x: 0, y: 0 };
       if (hs.h === p.id) {
-        // perseguir al más cercano
-        const tg = alive.sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
+        // perseguir al más cercano (menos al que me la acaba de pasar)
+        const can = alive.filter((e) => e.id !== hs.from || (ext.t ?? t) - hs.lt > 1.8);
+        if (!can.length) return { x: Math.cos(wob) * 0.4, y: Math.sin(wob) * 0.4 };
+        const tg = can.sort((a, b) => Math.hypot(a.x - p.x, a.y - p.y) - Math.hypot(b.x - p.x, b.y - p.y))[0];
         const dx = tg.x - p.x, dy = tg.y - p.y, l = Math.hypot(dx, dy) || 1;
         if (l < 0.35 && r() < 0.03) p.act = true;
         return { x: dx / l, y: dy / l };
@@ -117,8 +148,8 @@ const G = {
   },
 
   result: (p) => ({ h: p.out ? 0 : 1, t: p.out ? Math.round(p.tOut * 1000) : TOTAL * 1000 }),
-  hud: (p) => (p.out ? '👻' : '🙂'),
-  hudRight: (ents) => `🧍 ${ents.filter((e) => !e.out).length}`,
+  hud: (p) => (p.out ? '{ghost}' : '{heart}'),
+  hudRight: (ents) => `{people} ${ents.filter((e) => !e.out).length}`,
 
   music: 'tense',
   events(t0, t1, W, ext, ents, fx) {
@@ -159,7 +190,7 @@ const G = {
     if (!hs || hs.fx === undefined || hs.done) return null;
     const now = ext.t ?? t;
     if (now < hs.st) return '¡Prepárate!';
-    return `💣 ${Math.max(0, hs.fx - now).toFixed(1)}`;
+    return `{bomb} ${Math.max(0, hs.fx - now).toFixed(1)}`;
   },
   scene3d: {
     sky: '#3c1642',
@@ -258,9 +289,7 @@ const G = {
       if (!out && hs.h === e.id && !hs.done) {
         const px = v.X(e.x), py = v.Y(e.y) - PR * v.R * 2.1;
         const wob = Math.sin(t * (6 + (12 - Math.min(12, rem)) * 2)) * 4;
-        g.font = `${Math.round(PR * v.R * 1.9)}px system-ui, 'Apple Color Emoji'`;
-        g.textAlign = 'center'; g.textBaseline = 'middle';
-        g.fillText('💣', px + wob, py);
+        g.beginPath(); g.arc(px + wob, py, PR * v.R * 0.8, 0, TAU); g.fillStyle = '#1b1b1b'; g.fill();
         // chispa de la mecha
         g.beginPath(); g.arc(px + wob + PR * v.R * 0.55, py - PR * v.R * 0.7, 3 + Math.random() * 3, 0, TAU);
         g.fillStyle = rem < 3 ? '#ff006e' : '#ffbe0b'; g.fill();
@@ -287,7 +316,6 @@ const GM = { ...G, endWhenOneLeft: true };
 export default {
   id: 'hotbomb',
   name: 'Bomba caliente',
-  emoji: '💥',
   realtime: true,
   desc: '¡Alguien tiene una bomba encendida! Si la tienes, tócale a otro para pasársela. Cuando la mecha se acaba, quien la tenga queda fuera. Gana el último en pie.',
   dur: () => TOTAL * 1000,
@@ -295,7 +323,7 @@ export default {
   evaluate(v) {
     if (!v || typeof v.t !== 'number') return null;
     const t = Math.max(0, Math.min(TOTAL * 1000, v.t));
-    if (v.h > 0) return { score: 1e6, label: '🏆 ¡último en pie!' };
+    if (v.h > 0) return { score: 1e6, label: '{trophy} ¡último en pie!' };
     return { score: t, label: `explotó a los ${(t / 1000).toFixed(1)} s` };
   },
   bot: (r, seed, p) => simulateBot(G, seed, Number(String(p?.id || 'bot0').slice(3)) || 0),

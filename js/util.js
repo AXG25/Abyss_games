@@ -71,6 +71,6 @@ export function toast(msg, ms = 2200) {
 }
 
 export const COLORS = ['#ff4d6d', '#3a86ff', '#ffbe0b', '#06d6a0'];
-export const AVATARS = ['🐸', '🐱', '🐶', '🦊', '🐼', '🐵', '🐧', '🦄', '🐯', '🐙', '🦖', '🐷'];
+export { AVATARS, BOT_AVATARS } from './icons.js';
 export const BOT_NAMES = ['Robotín', 'Chispa', 'Tuerca', 'Bip-Bop'];
-export const BOT_AVATARS = ['🤖', '👾', '🛸', '🎃'];
+

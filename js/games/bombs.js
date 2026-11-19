@@ -263,9 +263,8 @@ const G = {
       if (t < b.te) {
         const k = (t - b.t0) / FUSE;
         const yOff = (1 - k) * (1 - k) * size * 0.6;
-        g.font = `${Math.round(R * 0.13)}px system-ui, 'Apple Color Emoji'`;
-        g.textAlign = 'center'; g.textBaseline = 'middle';
-        g.fillText('💣', bx, by - yOff);
+        g.beginPath(); g.arc(bx, by - yOff, R * 0.05, 0, TAU); g.fillStyle = '#1b1b1b'; g.fill();
+        g.beginPath(); g.arc(bx + R * 0.03, by - yOff - R * 0.05, R * 0.015, 0, TAU); g.fillStyle = '#ffbe0b'; g.fill();
       } else {
         const k = (t - b.te) / BOOM;
         const gr = g.createRadialGradient(bx, by, 0, bx, by, br * (0.8 + k * 0.4));
@@ -281,7 +280,6 @@ const G = {
 export default {
   id: 'bombs',
   name: 'Lluvia de bombas',
-  emoji: '💣',
   realtime: true,
   desc: '¡Caen bombas! La sombra roja muestra dónde van a explotar: sal de ahí. El botón ACELERA te da un impulso. 3 vidas.',
   dur: () => TOTAL * 1000,

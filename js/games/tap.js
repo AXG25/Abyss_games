@@ -5,7 +5,6 @@ const DUR = 8000;
 export default {
   id: 'tap',
   name: 'Machaca el botón',
-  emoji: '👊',
   desc: '¡Toca el botón lo más rápido que puedas durante 8 segundos!',
   dur: () => DUR,
 

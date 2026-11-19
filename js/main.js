@@ -4,6 +4,7 @@ import { GAMES, GAME_BY_ID } from './games/index.js';
 import { preload3D } from './rt.js';
 import { isMuted, setMuted, sfx } from './audio.js';
 import { esc, $, $$, beep, buzz, fanfare, store, toast, COLORS, AVATARS } from './util.js';
+import { avatarSVG, validAvatar, icon, gameIcon, rich } from './icons.js';
 
 const app = document.getElementById('app');
 const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
@@ -12,7 +13,7 @@ const S = {
   lobby: null,          // sala general (lista de salas abiertas)
   online: false,
   name: store('pp_name') || '',
-  av: store('pp_av') || AVATARS[Math.floor(Math.random() * AVATARS.length)],
+  av: AVATARS.includes(store('pp_av')) ? store('pp_av') : AVATARS[Math.floor(Math.random() * AVATARS.length)],
   code: null,
   nr: null,             // sala de juego (named room)
   host: null,           // instancia Host si este teléfono es anfitrión
@@ -70,9 +71,9 @@ function renderHome() {
         <label class="lbl">Tu nombre</label>
         <input id="name" maxlength="14" placeholder="¿Cómo te llamas?" value="${esc(S.name)}" autocomplete="off">
         <label class="lbl">Tu personaje</label>
-        <div class="avatars">${AVATARS.map((a) => `<button class="av ${a === S.av ? 'sel' : ''}" data-av="${a}">${a}</button>`).join('')}</div>
+        <div class="avatars">${AVATARS.map((a) => `<button class="av ${a === S.av ? 'sel' : ''}" data-av="${a}">${avatarSVG(a)}</button>`).join('')}</div>
       </div>
-      <button class="btn big primary" id="create">🎉 Crear sala</button>
+      <button class="btn big primary" id="create">${icon('party')} Crear sala</button>
       <div class="join-row">
         <input id="code" maxlength="4" placeholder="CÓDIGO" value="${esc(hashCode.toUpperCase())}" autocomplete="off" autocapitalize="characters">
         <button class="btn" id="join">Unirse</button>
@@ -86,14 +87,14 @@ function renderHome() {
   $('.avatars').addEventListener('click', (e) => {
     const b = e.target.closest('.av');
     if (!b) return;
-    S.av = b.dataset.av;
+    S.av = validAvatar(b.dataset.av);
     store('pp_av', S.av);
     $$('.av').forEach((x) => x.classList.toggle('sel', x === b));
     beep(600, 0.05, 'triangle');
   });
   const gfx = $('#gfx');
   const is2D = () => { try { return localStorage.getItem('pp_2d') === '1'; } catch { return false; } };
-  const paintGfx = () => { gfx.textContent = is2D() ? '🎮 Gráficos: 2D (toca para 3D)' : '🎮 Gráficos: 3D (toca para 2D si va lento)'; };
+  const paintGfx = () => { gfx.innerHTML = icon('gamepad') + (is2D() ? ' Gráficos: 2D (toca para 3D)' : ' Gráficos: 3D (toca para 2D si va lento)'); };
   paintGfx();
   gfx.addEventListener('click', () => { try { localStorage.setItem('pp_2d', is2D() ? '0' : '1'); } catch { /* nada */ } paintGfx(); });
   $('#code').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, ''); });
@@ -118,7 +119,7 @@ function renderHome() {
 }
 
 function checkName() {
-  if (!S.name) { toast('Escribe tu nombre primero ✍️'); $('#name')?.focus(); return false; }
+  if (!S.name) { toast('Escribe tu nombre primero'); $('#name')?.focus(); return false; }
   beep(520, 0.06, 'triangle');
   return true;
 }
@@ -162,7 +163,7 @@ async function enterRoom(code, creating) {
     S.nr = await S.lobby.join('pg-' + code.toLowerCase());
   } catch (e) {
     if (!creating) {
-      toast('No se pudo conectar a la sala 😕 Revisa tu internet e intenta otra vez', 3500);
+      toast('No se pudo conectar a la sala. Revisa tu internet e intenta otra vez', 3500);
       return renderHome();
     }
     toast('Sin conexión: modo práctica con bots', 3500);
@@ -220,7 +221,7 @@ function checkHost() {
     .sort((a, b) => (Number(a.presence.jt) || 0) - (Number(b.presence.jt) || 0) || (a.peer < b.peer ? -1 : 1));
   if (named[0] && named[0].peer === me) {
     becomeHost(S.lastSt);
-    toast('👑 Ahora eres el anfitrión');
+    toast('Ahora eres el anfitrión');
   }
 }
 
@@ -269,7 +270,7 @@ function playerChip(st, p, extra = '') {
   const c = colorOf(st, p.id);
   const you = p.id === S.me;
   return `<div class="chip ${you ? 'you' : ''} ${p.off ? 'off' : ''}" style="--c:${c}">
-      <span class="chip-av">${esc(p.a)}</span>
+      <span class="chip-av">${avatarSVG(validAvatar(p.a))}</span>
       <span class="chip-name">${esc(p.n)}${you ? ' <i>(tú)</i>' : ''}${p.b ? ' <i>bot</i>' : ''}</span>
       ${extra}
     </div>`;
@@ -292,17 +293,17 @@ function renderRoomLobby(st) {
     const p = st.pl[i];
     slots.push(p
       ? `<div class="slot filled" style="--c:${COLORS[i]}">
-           <span class="slot-av">${esc(p.a)}</span>
+           <span class="slot-av">${avatarSVG(validAvatar(p.a))}</span>
            <span class="slot-name">${esc(p.n)}</span>
-           <span class="slot-tag">${p.id === hostId ? '👑' : ''}${p.id === S.me ? 'tú' : p.b ? 'bot' : ''}</span>
-           ${p.s ? `<span class="slot-score">⭐ ${p.s}</span>` : ''}
+           <span class="slot-tag">${p.id === hostId ? icon('crown') : ''}${p.id === S.me ? 'tú' : p.b ? 'bot' : ''}</span>
+           ${p.s ? `<span class="slot-score">${icon('star')} ${p.s}</span>` : ''}
          </div>`
       : `<div class="slot empty"><span>Esperando…</span></div>`);
   }
   app.innerHTML = `
     <section class="screen room ${firstTime ? 'enter' : ''}">
       <header class="top">
-        <button class="btn ghost sm" id="leave">← Salir</button>
+        <button class="btn ghost sm" id="leave">${icon('back')} Salir</button>
         <span class="net"></span>
       </header>
       <div class="code-box">
@@ -311,7 +312,7 @@ function renderRoomLobby(st) {
         <small>Toca para copiar y compártelo</small>
       </div>
       <div class="slots">${slots.join('')}</div>
-      ${!inGame ? '<p class="hint">La sala está llena: estás mirando 👀</p>' : ''}
+      ${!inGame ? `<p class="hint">${icon('eye')} La sala está llena: estás mirando</p>` : ''}
       ${isHost ? `
         <div class="card host-panel">
           <div class="row">
@@ -324,16 +325,16 @@ function renderRoomLobby(st) {
               <button id="botminus">−</button><b class="seg-val">${st.bots}</b><button id="botplus">+</button>
             </div>
           </div>
-          <button class="btn big primary" id="start">🚀 ¡Empezar la fiesta!</button>
+          <button class="btn big primary" id="start">${icon('rocket')} ¡Empezar la fiesta!</button>
         </div>
         <div class="lbl center">o prueba un solo juego</div>
-        <div class="games-grid">${GAMES.map((g) => `<button class="game-card" data-g="${g.id}"><span>${g.emoji}</span><b>${esc(g.name)}</b></button>`).join('')}</div>
-      ` : `<div class="card waiting"><div class="dots"><i></i><i></i><i></i></div><p>Esperando a que el anfitrión 👑 empiece…</p></div>`}
+        <div class="games-grid">${GAMES.map((g) => `<button class="game-card" data-g="${g.id}">${gameIcon(g.id)}<b>${esc(g.name)}</b>${g.realtime ? '<i class="rt-tag">3D</i>' : ''}</button>`).join('')}</div>
+      ` : `<div class="card waiting"><div class="dots"><i></i><i></i><i></i></div><p>Esperando a que el anfitrión ${icon('crown')} empiece…</p></div>`}
     </section>`;
   updateNetPill();
   $('#leave').onclick = leaveRoom;
   $('#copy').onclick = () => {
-    try { navigator.clipboard.writeText(S.code).then(() => toast('Código copiado 📋'), () => toast('Código: ' + S.code)); } catch { toast('Código: ' + S.code); }
+    try { navigator.clipboard.writeText(S.code).then(() => toast('Código copiado'), () => toast('Código: ' + S.code)); } catch { toast('Código: ' + S.code); }
   };
   if (isHost) {
     $('#rounds').onclick = (e) => { const b = e.target.closest('button'); if (b) { S.host.setRounds(Number(b.dataset.n)); beep(500, 0.05); } };
@@ -352,7 +353,7 @@ function renderIntro(st) {
   app.innerHTML = `
     <section class="screen intro">
       <div class="round-tag">${total > 1 ? `Ronda ${st.r} de ${total}` : 'Juego de prueba'}</div>
-      <div class="intro-emoji">${g.emoji}</div>
+      <div class="intro-emoji">${gameIcon(g.id, 'gi big')}</div>
       <h1>${esc(g.name)}</h1>
       <p class="intro-desc">${esc(g.desc)}</p>
       <div class="count-down">3</div>
@@ -377,13 +378,13 @@ function renderPlay(st) {
   const meP = st.pl.find((p) => p.id === S.me);
   app.innerHTML = `
     <section class="screen play">
-      <header class="play-top"><span>${g.emoji} ${esc(g.name)}</span><button class="mute" id="mute">${isMuted() ? '🔇' : '🔊'}</button>${meP ? playerChip(st, meP) : ''}</header>
+      <header class="play-top"><span>${gameIcon(g.id, 'gi sm')} ${esc(g.name)}</span><button class="mute" id="mute">${icon(isMuted() ? 'soundOff' : 'soundOn')}</button>${meP ? playerChip(st, meP) : ''}</header>
       <div id="stage"></div>
     </section>`;
   const stage = $('#stage');
-  $('#mute').onclick = () => { setMuted(!isMuted()); $('#mute').textContent = isMuted() ? '🔇' : '🔊'; };
+  $('#mute').onclick = () => { setMuted(!isMuted()); $('#mute').innerHTML = icon(isMuted() ? 'soundOff' : 'soundOn'); };
   if (!meP) {
-    stage.innerHTML = `<div class="spectate"><div class="intro-emoji">👀</div><p>Estás mirando esta ronda</p></div>`;
+    stage.innerHTML = `<div class="spectate"><div class="intro-emoji">${icon('eye', 'ic huge')}</div><p>Estás mirando esta ronda</p></div>`;
     return;
   }
   const k = st.k;
@@ -418,28 +419,28 @@ function stopGame() {
 function renderResults(st) {
   const g = GAME_BY_ID[st.g];
   const byId = Object.fromEntries(st.pl.map((p) => [p.id, p]));
-  const medal = ['', '🥇', '🥈', '🥉', '4️⃣'];
+  const medal = ['', icon('medal1'), icon('medal2'), icon('medal3'), icon('medal4')];
   const total = [...st.pl].sort((a, b) => b.s - a.s);
   const max = Math.max(1, ...st.pl.map((p) => p.s));
   const mine = st.rk.find((x) => x.id === S.me);
   app.innerHTML = `
     <section class="screen results">
-      <div class="round-tag">${g ? g.emoji + ' ' + esc(g.name) : ''}</div>
-      <h1>${mine ? (mine.pl === 1 ? '¡Ganaste! 🎉' : mine.pl ? `Quedaste #${mine.pl}` : 'Sin puntos 😅') : 'Resultados'}</h1>
+      <div class="round-tag">${g ? gameIcon(g.id, 'gi sm') + ' ' + esc(g.name) : ''}</div>
+      <h1>${mine ? (mine.pl === 1 ? `¡Ganaste! ${icon('trophy')}` : mine.pl ? `Quedaste #${mine.pl}` : 'Sin puntos') : 'Resultados'}</h1>
       <ol class="rank">${st.rk.map((x, i) => {
         const p = byId[x.id];
         if (!p) return '';
         return `<li style="--c:${colorOf(st, x.id)};animation-delay:${i * 0.12}s" class="${x.id === S.me ? 'you' : ''}">
             <span class="medal">${medal[x.pl] || '·'}</span>
-            <span class="r-av">${esc(p.a)}</span>
-            <span class="r-name">${esc(p.n)}<small>${esc(x.l)}</small></span>
-            <span class="r-pts">+${x.p}⭐</span>
+            <span class="r-av">${avatarSVG(validAvatar(p.a))}</span>
+            <span class="r-name">${esc(p.n)}<small>${rich(esc(x.l))}</small></span>
+            <span class="r-pts">+${x.p}${icon('star')}</span>
           </li>`;
       }).join('')}</ol>
       <div class="lbl">Marcador ${st.seq.length > 1 ? `· ronda ${st.r}/${st.seq.length}` : ''}</div>
       <div class="bars">${total.map((p) => `
         <div class="bar-row" style="--c:${colorOf(st, p.id)}">
-          <span>${esc(p.a)}</span><div class="bar"><i style="width:${(p.s / max) * 100}%"></i></div><b>${p.s}</b>
+          <span class="bar-av">${avatarSVG(validAvatar(p.a))}</span><div class="bar"><i style="width:${(p.s / max) * 100}%"></i></div><b>${p.s}</b>
         </div>`).join('')}</div>
     </section>`;
   if (mine && mine.pl === 1) { fanfare(); buzz(60); } else beep(500, 0.1, 'triangle');
@@ -453,16 +454,16 @@ function renderFinal(st) {
   app.innerHTML = `
     <section class="screen final">
       <div class="confetti">${Array.from({ length: 40 }, (_, i) => `<i style="left:${(i * 37) % 100}%;animation-delay:${(i % 10) * 0.25}s;background:${COLORS[i % 4]}"></i>`).join('')}</div>
-      <h1>🏆 ${esc(sorted[0]?.n || '')} gana la fiesta</h1>
+      <h1>${icon('trophy')} ${esc(sorted[0]?.n || '')} gana la fiesta</h1>
       <div class="podium">${order.map((p) => {
         const place = sorted.indexOf(p);
         return `<div class="pod" style="--c:${colorOf(st, p.id)}">
-            <span class="pod-av">${esc(p.a)}</span>
+            <span class="pod-av">${avatarSVG(validAvatar(p.a))}</span>
             <span class="pod-name">${esc(p.n)}</span>
-            <div class="pod-block" style="height:${heights[place]}px"><b>${place + 1}</b><small>${p.s}⭐</small></div>
+            <div class="pod-block" style="height:${heights[place]}px"><b>${place + 1}</b><small>${p.s} ${icon('star')}</small></div>
           </div>`;
       }).join('')}</div>
-      ${sorted[3] ? `<p class="hint">4. ${esc(sorted[3].a)} ${esc(sorted[3].n)} · ${sorted[3].s}⭐</p>` : ''}
+      ${sorted[3] ? `<p class="hint">4. ${esc(sorted[3].n)} · ${sorted[3].s} ${icon('star')}</p>` : ''}
       <div id="final-ctl"></div>
     </section>`;
   fanfare();
@@ -477,8 +478,8 @@ function renderFinalControls() {
   if (box.dataset.m === want) return;
   box.dataset.m = want;
   box.innerHTML = S.host
-    ? `<button class="btn big primary" id="again">🔁 Volver a la sala</button>`
-    : `<p class="hint">El anfitrión 👑 puede volver a la sala para otra partida.</p>`;
+    ? `<button class="btn big primary" id="again">${icon('repeat')} Volver a la sala</button>`
+    : `<p class="hint">El anfitrión ${icon('crown')} puede volver a la sala para otra partida.</p>`;
   if (S.host) $('#again').onclick = () => S.host.toLobby();
 }
 

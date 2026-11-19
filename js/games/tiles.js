@@ -260,7 +260,6 @@ const G = {
 export default {
   id: 'tiles',
   name: 'Pisa el color',
-  emoji: '🟩',
   realtime: true,
   desc: 'Se anuncia un color y empieza la cuenta: corre a una baldosa de ese color antes de que las demás se caigan al agua. Cada vez hay menos tiempo. 2 vidas.',
   dur: () => TOTAL * 1000,

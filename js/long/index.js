@@ -44,7 +44,7 @@ export const LONG_GAMES = [
   {
     id: 'parques',
     name: 'Parqués',
-    desc: 'El clásico colombiano: saca tus fichas de la cárcel con pares, cómete a los rivales, cuídate en los seguros y corona tus 4 fichas en el cielo.',
+    desc: 'El clásico colombiano: saca tus fichas de la cárcel con pares (doble 1 o doble 6 sacan todas), arma bloqueos, cómete a los rivales y corona tus 4 fichas en el cielo.',
     min: 2, max: 4, mins: '20–45 min',
     rules: parques,
     mount: mountParques,

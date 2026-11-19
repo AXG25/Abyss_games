@@ -7,10 +7,13 @@
 // Reglas de esta versión:
 //  - 4 fichas por jugador, todas empiezan en la cárcel. 2 a 4 jugadores.
 //  - Se lanzan 2 dados. Cada dado mueve una ficha (pueden ser la misma o distintas).
-//  - Para salir de la cárcel hay que sacar PARES: salen todas las fichas que
-//    estén en la cárcel a la casilla de salida. Si todas tus fichas están en la
-//    cárcel tienes 3 intentos por turno.
+//  - Para salir de la cárcel hay que sacar PARES: sale UNA ficha a la casilla de
+//    salida. Con DOBLE 1 o DOBLE 6 salen TODAS las fichas que estén en la cárcel.
+//    Si todas tus fichas están en la cárcel tienes 3 intentos por turno.
 //  - Al salir de la cárcel se "come" a las fichas rivales que estén en tu salida.
+//  - BLOQUEOS: dos (o más) fichas del mismo color en una casilla del recorrido la
+//    cierran. Las fichas de otro color no pueden pasar por ahí ni caer ahí; las
+//    del mismo color sí pasan.
 //  - Pares = vuelves a lanzar. TRES PARES seguidos (sin contar los de salir de la
 //    cárcel): eliges una ficha y se corona directo en el cielo.
 //  - Caer en una casilla con fichas rivales las manda a la cárcel, salvo en los
@@ -27,7 +30,9 @@ export const SALIDA = 12;       // casilla de salida del jugador 0 en el recorri
 export const SEGUROS = new Set([4, 12, 21, 29, 38, 46, 55, 63]);   // 2 por lado: seguro y salida
 export const TURN_MS = 30000;
 export const OFF_TURN_MS = 6000;
-export const BOT_MS = [650, 1100];   // los bots lanzan y mueven rápido (el parqués tiene muchas jugadas)
+// los bots lanzan y mueven rápido (el parqués tiene muchas jugadas), pero después
+// de que los dados caen (la animación de los dados dura ~0,75 s)
+export const BOT_MS = [850, 1250];
 
 // asientos: con 2 jugadores, enfrentados
 const SEATS = { 1: [0], 2: [0, 2], 3: [0, 1, 2], 4: [0, 1, 2, 3] };
@@ -52,12 +57,56 @@ export function init(ids, seed, prevWins = {}) {
 export const current = (lg) => lg.order[lg.turn];
 // casilla del recorrido (0..67) de una ficha con progreso p del asiento s
 export const absOf = (s, p) => (s * 17 + SALIDA + p) % TRACK;
-const onTrack = (p) => p >= 0 && p <= LAST_TRACK;
+export const onTrack = (p) => p >= 0 && p <= LAST_TRACK;
+
+// ---- salir de la cárcel
+// Doble 1 o doble 6: salen todas las fichas de la cárcel. Otros pares: sale una.
+export const allOut = (d) => !!d && d[0] === d[1] && (d[0] === 1 || d[0] === 6);
+export const jailedOf = (lg, pid) => lg.pcs[pid].filter((p) => p === -1).length;
+// cuántas fichas saca de la cárcel el par `d`
+export const exitCount = (lg, pid, d = lg.dice) => (allOut(d) ? jailedOf(lg, pid) : Math.min(1, jailedOf(lg, pid)));
+
+// ---- bloqueos: 2 o más fichas del mismo color en una casilla del recorrido
+const countAt = (lg, o, abs) => lg.pcs[o].reduce((n, p) => n + (onTrack(p) && absOf(lg.seat[o], p) === abs ? 1 : 0), 0);
+// ¿Hay en la casilla `abs` un bloqueo de otro color que le cierra el paso a `pid`?
+export function rivalBlock(lg, pid, abs) {
+  for (const o of lg.order) if (o !== pid && countAt(lg, o, abs) >= 2) return o;
+  return null;
+}
+// Todos los bloqueos del tablero: [{ abs, p (dueño), n (fichas) }]
+export function blockades(lg) {
+  const out = [];
+  for (const o of lg.order) {
+    const cnt = new Map();
+    for (const p of lg.pcs[o]) if (onTrack(p)) { const a = absOf(lg.seat[o], p); cnt.set(a, (cnt.get(a) || 0) + 1); }
+    for (const [abs, n] of cnt) if (n >= 2) out.push({ abs, p: o, n });
+  }
+  return out;
+}
+// Primera casilla con un bloqueo rival entre `from` (sin contarla) y `to` (contándola), o -1.
+// La llegada es privada de cada color: ahí no hay bloqueos.
+export function blockedAt(lg, pid, from, to) {
+  const s = lg.seat[pid];
+  for (let q = Math.max(0, from + 1); q <= Math.min(to, LAST_TRACK); q++) {
+    const abs = absOf(s, q);
+    if (rivalBlock(lg, pid, abs)) return abs;
+  }
+  return -1;
+}
 
 // ¿Puede la ficha i moverse `d` casillas?
 export function canMove(lg, pid, i, d) {
   const p = lg.pcs[pid][i];
-  return p >= 0 && p < HOME && p + d <= HOME;
+  return p >= 0 && p < HOME && p + d <= HOME && blockedAt(lg, pid, p, p + d) < 0;
+}
+// Por qué la ficha i no se puede mover `d`: 'jail' · 'home' · 'exact' · 'block' · null (sí puede)
+export function whyNot(lg, pid, i, d) {
+  const p = lg.pcs[pid][i];
+  if (p === -1) return 'jail';
+  if (p >= HOME) return 'home';
+  if (p + d > HOME) return 'exact';
+  if (blockedAt(lg, pid, p, p + d) >= 0) return 'block';
+  return null;
 }
 
 // Opciones de jugada en la fase 'move': [{ d, i }] (+ salir de la cárcel)
@@ -83,13 +132,15 @@ function capture(lg, pid, abs, force = false) {
   return hit;
 }
 
+// saca de la cárcel una ficha (o todas con doble 1 / doble 6)
 function exitJail(lg, pid) {
   const ps = lg.pcs[pid];
+  const all = allOut(lg.dice);
   let n = 0;
-  for (let i = 0; i < 4; i++) if (ps[i] === -1) { ps[i] = 0; n++; }
+  for (let i = 0; i < 4; i++) if (ps[i] === -1 && (all || n === 0)) { ps[i] = 0; n++; }
   // la salida es seguro para los demás, pero quien sale de la cárcel se los come
   const hit = capture(lg, pid, absOf(lg.seat[pid], 0), true);
-  return { n, hit };
+  return { n, hit, all: all ? 1 : 0 };
 }
 
 function nextTurn(lg) {
@@ -143,8 +194,8 @@ export function act(lg, pid, a, info = {}) {
     if (!onBoard) {
       // todo en la cárcel (o coronado): 3 intentos de sacar pares
       if (pair) {
-        const { n, hit } = exitJail(lg, pid);
-        lg.ev = { t: 'exit', p: pid, d, k: n, hit, n: lg.tn };
+        const { n, hit, all } = exitJail(lg, pid);
+        lg.ev = { t: 'exit', p: pid, d, k: n, all, hit, r: 1, n: lg.tn };   // r: salió con este lanzamiento
         lg.tries = 0;
         lg.dice = d;
         lg.used = [true, true];
@@ -164,6 +215,7 @@ export function act(lg, pid, a, info = {}) {
     lg.canExit = pair && jailed > 0;
     if (!options(lg, pid).length && !lg.canExit) {
       lg.ev.lost = 1;              // ningún dado sirve
+      if ([0, 1, 2, 3].some((i) => d.some((n) => whyNot(lg, pid, i, n) === 'block'))) lg.ev.block = 1;   // por un bloqueo
       if (pair) { lg.phase = 'roll'; lg.used = [true, true]; } else { nextTurn(lg); lg.dice = d; lg.used = [true, true]; }
     }
     return true;
@@ -171,9 +223,9 @@ export function act(lg, pid, a, info = {}) {
   if (a.t === 'exit') {
     if (lg.phase !== 'move' || !lg.canExit || lg.used[0] || lg.used[1]) return false;
     const d = lg.dice;
-    const { n, hit } = exitJail(lg, pid);
+    const { n, hit, all } = exitJail(lg, pid);
     lg.pairs = Math.max(0, lg.pairs - 1);   // los pares de salir de la cárcel no cuentan
-    lg.ev = { t: 'exit', p: pid, d, k: n, hit, n: lg.tn };
+    lg.ev = { t: 'exit', p: pid, d, k: n, all, hit, n: lg.tn };
     lg.used = [true, true];
     lg.canExit = false;
     lg.phase = 'roll';
@@ -191,6 +243,7 @@ export function act(lg, pid, a, info = {}) {
     let hit = [];
     if (onTrack(to)) hit = capture(lg, pid, absOf(lg.seat[pid], to));
     lg.ev = { t: 'move', p: pid, i, from, to, hit, home: to === HOME ? 1 : 0, n: lg.tn };
+    if (onTrack(to) && countAt(lg, pid, absOf(lg.seat[pid], to)) === 2) lg.ev.wall = 1;   // armó un bloqueo
     lg.tn++;
     if (!checkWin(lg, pid)) afterMove(lg, pid);
     return true;
@@ -208,16 +261,20 @@ export function act(lg, pid, a, info = {}) {
 }
 
 // ---------------------------------------------------------------- bot
-// ¿Qué tan peligrosa es la casilla `abs` para mí? (rivales detrás a 1..12 casillas)
+// ¿Qué tan peligrosa es la casilla `abs` para mí? Rivales detrás a 1..12 casillas
+// que de verdad pueden llegar (sin entrar antes a su llegada ni chocar con un bloqueo).
 function danger(lg, pid, abs) {
   if (SEGUROS.has(abs)) return 0;
   let n = 0;
   for (const o of lg.order) {
     if (o === pid) continue;
+    const s = lg.seat[o];
     for (const p of lg.pcs[o]) {
       if (!onTrack(p)) continue;
-      const dist = (abs - absOf(lg.seat[o], p) + TRACK) % TRACK;
-      if (dist >= 1 && dist <= 12) n++;
+      const dist = (abs - absOf(s, p) + TRACK) % TRACK;
+      if (dist < 1 || dist > 12 || p + dist > LAST_TRACK) continue;
+      if (blockedAt(lg, o, p, p + dist) >= 0) continue;
+      n++;
     }
   }
   return n;
@@ -227,6 +284,9 @@ function scoreMove(lg, pid, { d, i }) {
   const s = lg.seat[pid];
   const from = lg.pcs[pid][i];
   const to = from + lg.dice[d];
+  // el tablero después de la jugada (para ver bloqueos y peligros)
+  const sim = { ...lg, pcs: { ...lg.pcs, [pid]: lg.pcs[pid].slice() } };
+  sim.pcs[pid][i] = to;
   let v = to / 8;
   if (to === HOME) v += 80;
   else if (to > LAST_TRACK) v += 25;
@@ -235,9 +295,14 @@ function scoreMove(lg, pid, { d, i }) {
     if (!SEGUROS.has(abs)) {
       for (const o of lg.order) if (o !== pid) for (const p of lg.pcs[o]) if (onTrack(p) && absOf(lg.seat[o], p) === abs) v += 100;
     } else v += 18;
-    v -= danger(lg, pid, abs) * 12;
+    if (countAt(sim, pid, abs) === 2) v += 14;      // arma un bloqueo
+    v -= danger(sim, pid, abs) * 12;
   }
-  if (onTrack(from)) v += danger(lg, pid, absOf(s, from)) * 10;   // escapar de un peligro
+  if (onTrack(from)) {
+    const fa = absOf(s, from);
+    v += danger(lg, pid, fa) * 10;                  // escapar de un peligro
+    if (countAt(lg, pid, fa) === 2) v -= 8;          // deshace su bloqueo
+  }
   return v;
 }
 
@@ -257,8 +322,8 @@ export function autoMove(lg, pid) {
     if (v > bs) { bs = v; best = o; }
   }
   if (lg.canExit) {
-    const jailed = lg.pcs[pid].filter((p) => p === -1).length;
-    if (40 + jailed * 15 > bs) return { t: 'exit' };
+    const onBoard = lg.pcs[pid].filter((p) => p >= 0 && p < HOME).length;
+    if (30 + exitCount(lg, pid) * 22 + (onBoard <= 1 ? 30 : 0) > bs) return { t: 'exit' };
   }
   return best ? { t: 'move', d: best.d, i: best.i } : { t: 'roll' };
 }

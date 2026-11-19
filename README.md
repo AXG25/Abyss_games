@@ -36,7 +36,7 @@ el anfitrión crea la sala, los amigos se unen y él toca el juego para empezar.
 | 🃏 | Ocho loco *(2–4)* | Baraja francesa. Tira del mismo palo o número; el 8 es comodín y cambia el palo; el 2 hace robar 2 (se acumula); la J salta; la Q cambia el sentido. Gana quien se quede sin cartas |
 | 🌪️ | Caos *(2–4)* | Juego de cartas propio con 4 elementos (fuego, agua, planta, rayo): mismo elemento o mismo número. Cartas de bloqueo (el siguiente pierde el turno), dirección, elemento (comodín), +2 y +4. Regla de la casa: los +2 y +4 se suman y quien no pueda responder se come todo lo acumulado |
 | ♟️ | Ajedrez *(solo 2)* | Reglas completas: enroque, captura al paso, coronación, jaque mate y tablas (ahogado, triple repetición, 50 movimientos, material insuficiente, por acuerdo). Reloj 10 min + 3 s por jugada; pierde quien se queda sin tiempo o se desconecta más de 1 min en su turno. Con 3 o más jugadores en la sala se deshabilita |
-| 🎲 | Parqués *(2–4)* | El clásico colombiano: se sale de la cárcel con pares (salen todas las fichas; 3 intentos si todas están presas), cada dado mueve una ficha, comer manda a la cárcel (no en seguros ni salidas, salvo al salir de la cárcel), pares = otro lanzamiento, tres pares seguidos coronan la ficha que elijas, número exacto para el cielo. Gana quien corone sus 4 fichas |
+| 🎲 | Parqués *(2–4)* | El clásico colombiano: se sale de la cárcel con pares (sale una ficha; con doble 1 o doble 6 salen todas; 3 intentos si todas están presas), cada dado mueve una ficha, **bloqueos**: dos fichas del mismo color en una casilla la cierran (las de otro color no pueden pasar ni caer ahí; las del mismo color sí pasan), comer manda a la cárcel (no en seguros ni salidas, salvo al salir de la cárcel), pares = otro lanzamiento, tres pares seguidos coronan la ficha que elijas, número exacto para el cielo. Gana quien corone sus 4 fichas |
 | 🁫 | Dominó *(2–4)* | Doble seis, 7 fichas cada uno. Con 4 jugadores, por parejas y sin pozo; con 2 o 3, individual con pozo. Abre el doble seis (luego quien ganó la mano). La mano termina en dominó o tranque (gana quien tenga menos puntos); el ganador suma los puntos de sus rivales. Partida a 100 |
 | ✍️ | Stop *(2–4)* | Basta / Tutti Frutti: el anfitrión elige categorías (o agrega las suyas), rondas y tiempo. Sale una letra, todos escriben a la vez y quien llene todo grita ¡STOP!. Luego se vota: una respuesta se anula si la marca más de la mitad de los demás. 100 puntos si es única, 50 si se repite |
 
@@ -46,6 +46,11 @@ el anfitrión crea la sala, los amigos se unen y él toca el juego para empezar.
 - Ocho loco: 30 s por turno; si se acaba, juega solo (6 s si el jugador se desconectó).
 - Ajedrez: reloj por jugador (`onTime`). Revancha con colores cambiados. Las
   reglas se comprueban con *perft* (conteo de jugadas en posiciones de prueba).
+- Parqués (`js/long/parques-ui.js`): el tablero fijo es un `<svg>` que se dibuja
+  una sola vez; encima va otro con los peones, que saltan casilla por casilla
+  (`requestAnimationFrame`). Con cada actualización de la sala solo se toca lo
+  que cambió (antes se volvía a crear todo y el tablero parpadeaba). Los dados
+  son cubos 3D de CSS que se lanzan y caen en el número.
 - Cada juego dice cuántos jugadores admite (`min`/`max`); fuera de ese rango
   aparece deshabilitado en la sala con el motivo.
 - Los bots también juegan. Si el anfitrión se va, otro sigue la partida.

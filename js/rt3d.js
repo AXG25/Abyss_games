@@ -602,7 +602,7 @@ export function miniStage(stageEl, opts = {}) {
   Object.assign(sun.shadow.camera, { left: -2, right: 2, top: 2, bottom: -2, near: 0.5, far: 10 });
   sun.shadow.bias = -0.002;
   scene.add(sun);
-  const camera = new THREE.PerspectiveCamera(opts.fov || 42, 1, 0.05, 50);
+  const camera = new THREE.PerspectiveCamera(opts.fov || 42, 1, 0.05, opts.far || 50);
   const particles = new Particles(scene, 600);
   const S = { THREE, scene, camera, renderer, particles, sun, aspect: 1, shake: 0 };
   const fit = () => {
@@ -638,6 +638,13 @@ export function miniStage(stageEl, opts = {}) {
       if (S.shake > 0.0005) { camera.position.x += (Math.random() - 0.5) * S.shake; camera.position.y += (Math.random() - 0.5) * S.shake; S.shake *= Math.pow(0.02, dt); }
       particles.update(dt);
       renderer.render(scene, camera);
+      // capa encima (p. ej. el arco en primera persona, con su propia cámara)
+      if (S.overlay) {
+        renderer.autoClear = false;
+        renderer.clearDepth();
+        renderer.render(S.overlay.scene, S.overlay.camera);
+        renderer.autoClear = true;
+      }
       raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);

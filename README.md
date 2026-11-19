@@ -9,6 +9,7 @@ compiten ronda tras ronda por estrellas ⭐.
 | | Juego | Cómo se gana |
 |---|---|---|
 | 🏎️ | Gran Premio *(3D, tiempo real)* | Carrera de karts isométrica a 3 vueltas: turbo, flechas de impulso, aceite y minimapa |
+| 🏹 | Tiro con arco *(3D)* | 3 rondas de precisión (18, 30 y 45 m): tensa, apunta y suelta compensando el viento antes de que se acabe el tiempo |
 | 👊 | Machaca el botón *(3D)* | Carrera de torres: cada toque hace crecer tu torre |
 | 🤠 | Reflejos de vaquero *(3D)* | Duelo del oeste a 3 rondas: el más rápido en disparar tras la campana tumba a todos |
 | 🔢 | Cuenta rápida *(3D)* | Llueven objetos 3D sobre un carrusel: cuenta los pedidos y responde rápido |

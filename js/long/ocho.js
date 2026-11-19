@@ -11,6 +11,11 @@
 //  - Si no puedes o no quieres jugar, robas 1. Si esa carta sirve, puedes jugarla; si no, pasas.
 //  - Gana quien se quede sin cartas.
 //
+// Cada jugada queda en `lg.ev` (y las últimas 3 en `lg.hist`) con lo que hace falta
+// para explicarla: a quién saltó la J (skip), si la Q cambió el sentido (rev),
+// a quién le toca responder el +2 (to, sum), si la carta robada sirve (keep) y
+// quién juega después (next).
+//
 // Cartas: texto de 2-3 letras, palo + número: 'H8', 'S10', 'DQ', 'CA'.
 //   Palos: H corazones, D diamantes, C tréboles, S picas.
 import { mulberry32, shuffle } from '../util.js';
@@ -55,6 +60,7 @@ export function init(ids, seed, prevWins = {}) {
     drawn: null,       // carta que acaba de robar el jugador en turno
     tn: 1,             // número de turno (cada acción válida lo cambia)
     ev: null,          // última jugada (para animaciones y sonidos)
+    hist: [],          // últimas jugadas (para el historial de la pantalla)
     win: null,
     wins,
     seed: (seed * 7 + 13) >>> 0,
@@ -95,6 +101,12 @@ function endTurn(lg, steps = 1) {
   lg.tn++;
 }
 
+// guarda la jugada en el historial (las 3 últimas) y anota quién sigue
+function logEv(lg) {
+  if (!lg.win) lg.ev.next = current(lg);
+  lg.hist = [...(lg.hist || []), lg.ev].slice(-3);
+}
+
 // Aplica la acción de un jugador. Devuelve true si cambió algo.
 //   { t: 'play', c, s? }  jugar carta (s = palo elegido si es un 8)
 //   { t: 'draw' }         robar (o robar el castigo acumulado de los 2)
@@ -117,13 +129,16 @@ export function act(lg, pid, a) {
       lg.wins[pid] = (lg.wins[pid] || 0) + 1;
       lg.drawn = null;
       lg.tn++;
+      logEv(lg);
       return true;
     }
     let steps = 1;
-    if (k === '2') lg.stack += 2;
-    else if (k === 'J') steps = 2;
-    else if (k === 'Q') { if (lg.order.length === 2) steps = 2; else lg.dir *= -1; }
+    const after = lg.order[nextIdx(lg, 1)];   // el que iba después
+    if (k === '2') { lg.stack += 2; lg.ev.to = after; lg.ev.sum = lg.stack; }
+    else if (k === 'J') { steps = 2; lg.ev.skip = after; }
+    else if (k === 'Q') { if (lg.order.length === 2) { steps = 2; lg.ev.skip = after; } else { lg.dir *= -1; lg.ev.rev = 1; } }
     endTurn(lg, steps);
+    logEv(lg);
     return true;
   }
   if (a.t === 'draw') {
@@ -134,23 +149,26 @@ export function act(lg, pid, a) {
       lg.stack = 0;
       lg.ev = { p: pid, t: 'take', n: lg.tn, k: got };
       endTurn(lg);
+      logEv(lg);
       return true;
     }
     if (lg.drawn) return false;
     const c = takeCard(lg);
     lg.ev = { p: pid, t: 'draw', n: lg.tn, k: c ? 1 : 0 };
-    if (!c) { endTurn(lg); return true; }
+    if (!c) { endTurn(lg); logEv(lg); return true; }
     hand.push(c);
     lg.drawn = c;
-    // si la carta robada no sirve, el turno pasa solo
+    // si la carta robada no sirve, el turno pasa solo; si sirve, puede jugarla
     if (!canPlay(lg, c)) endTurn(lg);
-    else lg.tn++;
+    else { lg.tn++; lg.ev.keep = 1; }
+    logEv(lg);
     return true;
   }
   if (a.t === 'pass') {
     if (!lg.drawn) return false;
     lg.ev = { p: pid, t: 'pass', n: lg.tn };
     endTurn(lg);
+    logEv(lg);
     return true;
   }
   return false;

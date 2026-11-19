@@ -44,6 +44,12 @@ el anfitrión crea la sala, los amigos se unen y él toca el juego para empezar.
   estado en `st.lg`; los demás envían sus jugadas en `presence.la`. Cada jugada
   dice para qué turno era (`tn`), así nunca se aplica dos veces.
 - Ocho loco: 30 s por turno; si se acaba, juega solo (6 s si el jugador se desconectó).
+  El botón **?** muestra las reglas y el poder de cada carta especial (las de la
+  mano llevan su etiqueta: +2, Comodín, Salta, Reversa). Debajo de la mesa se ven
+  las últimas 3 jugadas (`lg.hist`), así queda claro por qué alguien juega dos
+  veces seguidas: robó una carta que le sirvió, o salió una J (o una Q con 2
+  jugadores). La pantalla solo repinta lo que cambió (antes la barra de tiempo
+  del que jugaba volvía a llenarse con cada actualización de la sala).
 - Ajedrez: reloj por jugador (`onTime`). Revancha con colores cambiados. Las
   reglas se comprueban con *perft* (conteo de jugadas en posiciones de prueba).
 - Parqués (`js/long/parques-ui.js`): el tablero fijo es un `<svg>` que se dibuja

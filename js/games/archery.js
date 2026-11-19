@@ -424,13 +424,22 @@ function build3D(m, stage, st, ctx) {
   face.position.z = 0.004;
   target.add(face);
   const legMat = new THREE.MeshStandardMaterial({ color: '#6f4518', roughness: 0.9 });
-  for (const [x, z, rx] of [[-0.6, -0.1, 0.22], [0.6, -0.1, 0.22], [0, -0.8, -0.5]]) {
-    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 2.0, 6), legMat);
-    leg.position.set(x, -CY + 0.9, z);
-    leg.rotation.x = rx;
+  // caballete DETRÁS de la paja (antes las patas atravesaban la diana)
+  const legBetween = (ax, ay, az, bx, by, bz) => {
+    const A = new THREE.Vector3(ax, ay, az), B = new THREE.Vector3(bx, by, bz);
+    const dir = B.clone().sub(A);
+    const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.045, dir.length(), 6), legMat);
+    leg.position.copy(A).add(B).multiplyScalar(0.5);
+    leg.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
     leg.castShadow = true;
     target.add(leg);
-  }
+  };
+  legBetween(-0.55, 0.55, -0.5, -0.62, -CY, -0.32);
+  legBetween(0.55, 0.55, -0.5, 0.62, -CY, -0.32);
+  legBetween(0, 0.6, -0.52, 0, -CY, -1.3);
+  const bar = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.06, 0.06), legMat);
+  bar.position.set(0, -0.86, -0.38);
+  target.add(bar);
   scene.add(target);
   // dianas vecinas (decoración)
   const deco = [];

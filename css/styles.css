@@ -545,3 +545,4 @@ input:focus { border-color: var(--yellow); }
 .swr-btn.cool::after { animation: swrCool 0.33s linear; }
 @keyframes swrCool { from { transform: scaleY(1); } to { transform: scaleY(0); } }
 .swr-btn.off { filter: grayscale(0.8) brightness(0.6); }
+.ver { text-align: center; font-size: 11px; opacity: 0.4; margin: 0; }

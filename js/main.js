@@ -101,6 +101,7 @@ function renderHome() {
       <button class="btn ghost sm gfx" id="gfx"></button>
       <div class="open-rooms"></div>
       <p class="hint" id="hint"></p>
+      <p class="ver">versión ${esc((document.documentElement.dataset.v || 'dev').slice(0, 6))}</p>
     </section>`;
   updateNetPill();
   $('#name').addEventListener('input', (e) => { S.name = e.target.value.trim(); store('pp_name', S.name); });

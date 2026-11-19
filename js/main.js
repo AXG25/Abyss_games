@@ -62,7 +62,10 @@ boot();
 async function boot() {
   if (await newerVersion()) return;
   renderHome();
-  S.lobby = await connectLobby();
+  // se guarda la promesa: si alguien toca "Crear sala" o "Unirse" antes de que
+  // termine de conectar, enterRoom la espera en vez de fallar
+  S.lobbyReady = connectLobby();
+  S.lobby = await S.lobbyReady;
   S.lobby.onPeers(() => { if (!S.nr) renderOpenRooms(); });
   if (S.lobby.onConnection) S.lobby.onConnection(() => updateNetPill());
   updateNetPill();
@@ -183,6 +186,12 @@ async function enterRoom(code, creating) {
   const myTry = (S.joinTry = (S.joinTry || 0) + 1);
   $('#cancelJoin').onclick = () => { S.joinTry++; renderHome(); };
   try {
+    if (!S.lobby) {
+      const el = $('.join-st');
+      if (el) el.textContent = 'Conectando…';
+      S.lobby = await (S.lobbyReady || (S.lobbyReady = connectLobby()));
+      if (S.joinTry !== myTry) return;
+    }
     const nr = await S.lobby.join('pg-' + code.toLowerCase(), {
       create: creating,
       onStatus: (m) => { const el = $('.join-st'); if (el && S.joinTry === myTry) el.textContent = m; },
@@ -241,11 +250,11 @@ function dropHost() {
   S.host.destroy();
   S.host = null;
   S.nr.presence({ st: null, hs: null }).catch(() => {});
-  S.lobby.presence({ open: null }).catch(() => {});
+  if (S.lobby) S.lobby.presence({ open: null }).catch(() => {});
 }
 
 function advertise() {
-  if (!S.host || S.lobby.kind !== 'claude') return;
+  if (!S.host || !S.lobby || S.lobby.kind !== 'claude') return;
   const st = S.host.st;
   S.lobby.presence({ open: { c: S.code, n: st.pl.filter((p) => !p.b).length, h: S.name, ph: st.ph } }).catch(() => {});
 }

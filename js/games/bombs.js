@@ -106,6 +106,22 @@ const G = {
 
   result: (p) => ({ h: Math.max(0, p.h), t: p.out ? Math.round(p.tOut * 1000) : TOTAL * 1000 }),
 
+  music: 'volcano',
+  events(t0, t1, W, ext, ents, fx) {
+    for (const b of W.bombs) {
+      if (b.t0 > t1) break;
+      if (b.t0 > t0 && fx.near(b.x, b.y) > 0.75) fx.sfx.whistle(0.6);
+      if (b.te > t0 && b.te <= t1) {
+        const v = fx.near(b.x, b.y);
+        fx.sfx.boom(v);
+        fx.shake(0.07 * v);
+        fx.burst(b.x, 0.05, b.y, { n: 34, color: ['#fff3b0', '#ffbe0b', '#ff7b00', '#e63946'], speed: b.r * 4.5, up: 1.3, size: 0.06, life: 0.6, gravity: 1.5, grow: 1.5 });
+        fx.burst(b.x, 0.1, b.y, { n: 12, color: ['#555555', '#777777', '#333333'], speed: b.r * 2, up: 0.8, size: 0.09, life: 1.1, gravity: -0.2, grow: 1.2, drag: 2 });
+        fx.burst(b.x, 0.03, b.y, { n: 10, color: ['#8d99ae', '#5c677d'], speed: b.r * 5, up: 1.6, size: 0.03, life: 0.8, gravity: 4 });
+      }
+    }
+  },
+
   PR,
   scene3d: {
     sky: '#3d0c11',

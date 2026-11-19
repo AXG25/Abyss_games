@@ -120,6 +120,39 @@ const G = {
   hud: (p) => (p.out ? '👻' : '🙂'),
   hudRight: (ents) => `🧍 ${ents.filter((e) => !e.out).length}`,
 
+  music: 'tense',
+  events(t0, t1, W, ext, ents, fx) {
+    const hs = ext.hs;
+    if (!hs) return;
+    const st = fx.st;
+    if (hs.h !== st.h) {
+      if (st.h !== undefined && hs.h) {
+        const e = ents.find((x) => x.id === hs.h);
+        if (e) {
+          if (e !== fx.me) fx.sfx.pass(0.6);
+          fx.burst(e.x, 0.25, e.y, { n: 18, color: ['#ffbe0b', '#ff006e', '#ffffff'], speed: 0.6, up: 0.8, size: 0.04, life: 0.5 });
+        }
+      }
+      st.h = hs.h;
+    }
+    if (!hs.done && t1 >= hs.st) {
+      const rem = hs.fx - t1;
+      const iv = Math.max(0.09, Math.min(0.6, rem / 8));
+      if (t1 - (st.lt || 0) >= iv) { st.lt = t1; fx.sfx.tick(rem < 3 ? 1.5 : 0.9); if (rem < 3) fx.sfx.fuse(0.8); }
+    }
+    if (!hs.done && hs.st > t0 && hs.st <= t1) fx.sfx.go();
+    for (const id of Object.keys(hs.outs || {})) {
+      if (st['o' + id]) continue;
+      st['o' + id] = 1;
+      const e = ents.find((x) => x.id === id);
+      const x = e ? e.x : 0, y = e ? e.y : 0;
+      fx.sfx.boom(1);
+      fx.shake(0.08);
+      fx.burst(x, 0.1, y, { n: 55, color: ['#fff3b0', '#ffbe0b', '#ff7b00', '#ff006e'], speed: 1.3, up: 1.5, size: 0.07, life: 0.8, gravity: 1.5, grow: 1.2 });
+      fx.burst(x, 0.15, y, { n: 16, color: ['#555555', '#333333'], speed: 0.6, up: 0.8, size: 0.1, life: 1.2, gravity: -0.2, grow: 1 });
+    }
+  },
+
   PR,
   topText(t, W, ext) {
     const hs = ext && ext.hs;

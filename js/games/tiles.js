@@ -128,6 +128,26 @@ const G = {
     return { text: t < rd.drop ? `¡${col.n}! ${Math.ceil(rd.drop - t)}` : `¡${col.n}!`, color: col.c };
   },
 
+  music: 'disco',
+  events(t0, t1, W, ext, ents, fx) {
+    for (const rd of W.rounds) {
+      if (rd.s > t1) break;
+      if (rd.s > t0 && rd.s <= t1) { fx.say(COLORS[rd.c].n.toLowerCase()); fx.sfx.warn(); }
+      for (let k = 1; k <= 3; k++) { const tt = rd.drop - k; if (tt > rd.s && tt > t0 && tt <= t1) fx.sfx.count(); }
+      if (rd.drop > t0 && rd.drop <= t1) {
+        fx.sfx.rumble();
+        fx.sfx.splash(0.7, 0.3);
+        fx.shake(0.045);
+        for (let k = 0; k < N * N; k++) {
+          if (rd.cols[k] === rd.c) continue;
+          const [x, y] = center(k);
+          fx.burst(x, -0.1, y, { n: 4, color: ['#caf0f8', '#90e0ef', '#ffffff'], speed: 0.3, up: 1.3, size: 0.05, life: 0.7, gravity: 3, spread: TS * 0.6 });
+        }
+      }
+      if (rd.drop + DROP > t0 && rd.drop + DROP <= t1) fx.sfx.whoosh(0.6);
+    }
+  },
+
   PR,
   scene3d: {
     sky: '#90e0ef',

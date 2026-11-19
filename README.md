@@ -17,7 +17,7 @@ compiten ronda tras ronda por estrellas ⭐.
 | 💣 | Lluvia de bombas *(tiempo real)* | Esquivar las bombas por su sombra; 3 vidas |
 | 🟩 | Pisa el color *(tiempo real)* | Pararse en el color anunciado antes de que el piso se caiga |
 | 🪙 | Fiebre de monedas *(tiempo real)* | Recoger más monedas en 30 s |
-| 🥊 | Empujones *(tiempo real)* | Tirar a los demás de una plataforma que se encoge |
+| 🌀 | Trompos de batalla *(tiempo real)* | Embestir con tu trompo a los demás para sacarlos del estadio |
 | 💥 | Bomba caliente *(tiempo real)* | Pasar la bomba antes de que explote; gana el último en pie |
 | 🧊 | Hielo frágil *(tiempo real)* | El hielo que pisas se hunde; gana el último en pie |
 
@@ -36,6 +36,13 @@ Puntos por ronda: 1.º 3⭐ · 2.º 2⭐ · 3.º 1⭐ · 4.º 0⭐.
 - **Bots** para probar solo (el anfitrión los agrega con +/−).
 - **Modo local**: fuera de Claude se usa `BroadcastChannel`, así que varias
   pestañas del mismo navegador pueden jugar entre sí.
+
+## Sonido
+
+`js/audio.js` sintetiza todos los efectos con WebAudio (explosiones, choques
+metálicos, salpicaduras, rugidos…) y genera música de fondo distinta para cada
+juego (`G.music`). Los eventos del mundo de cada juego (`G.events`) disparan
+sonidos, partículas y sacudidas de cámara.
 
 ## 3D
 

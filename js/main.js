@@ -2,6 +2,7 @@ import { connectLobby, LocalRoom } from './net.js';
 import { Host, findHost, MAX_PLAYERS } from './engine.js';
 import { GAMES, GAME_BY_ID } from './games/index.js';
 import { preload3D } from './rt.js';
+import { isMuted, setMuted, sfx } from './audio.js';
 import { esc, $, $$, beep, buzz, fanfare, store, toast, COLORS, AVATARS } from './util.js';
 
 const app = document.getElementById('app');
@@ -376,10 +377,11 @@ function renderPlay(st) {
   const meP = st.pl.find((p) => p.id === S.me);
   app.innerHTML = `
     <section class="screen play">
-      <header class="play-top"><span>${g.emoji} ${esc(g.name)}</span>${meP ? playerChip(st, meP) : ''}</header>
+      <header class="play-top"><span>${g.emoji} ${esc(g.name)}</span><button class="mute" id="mute">${isMuted() ? '🔇' : '🔊'}</button>${meP ? playerChip(st, meP) : ''}</header>
       <div id="stage"></div>
     </section>`;
   const stage = $('#stage');
+  $('#mute').onclick = () => { setMuted(!isMuted()); $('#mute').textContent = isMuted() ? '🔇' : '🔊'; };
   if (!meP) {
     stage.innerHTML = `<div class="spectate"><div class="intro-emoji">👀</div><p>Estás mirando esta ronda</p></div>`;
     return;

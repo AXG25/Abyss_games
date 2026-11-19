@@ -92,6 +92,18 @@ const G = {
   },
   endText: (p) => `🪙 ¡${p.s} monedas!`,
 
+  music: 'happy',
+  events(t0, t1, W, ext, ents, fx) {
+    for (let k = 1; k <= 5; k++) { const tt = TOTAL - k; if (tt > t0 && tt <= t1) fx.sfx.count(); }
+    for (const c of W.coins) {
+      if (c.t0 > t1) break;
+      if (c.v > 1 && c.t0 > t0) { fx.sfx.big(0.5); fx.burst(c.x, 0.1, c.y, { n: 24, color: ['#ffd60a', '#ffffff'], speed: 0.45, up: 1, size: 0.04, life: 0.8, gravity: 1 }); }
+    }
+    const n = ext.taken ? ext.taken.size : 0;
+    if (n > (fx.st.tk || 0)) fx.sfx.coin(0.25);
+    fx.st.tk = n;
+  },
+
   PR,
   scene3d: {
     sky: '#a8e6cf',

@@ -153,6 +153,33 @@ export const G = {
     return null;
   },
 
+  music: 'pirate',
+  events(t0, t1, W, ext, ents, fx) {
+    const st = fx.st;
+    if (!st.r0) { st.r0 = 1; fx.sfx.roar(0.9); fx.shake(0.03); }
+    for (const T of [12, 26]) {
+      if (t0 < T && t1 >= T) {
+        fx.sfx.roar(1);
+        fx.shake(0.07);
+        fx.burst(0, 0.05, 0, { n: 50, color: ['#7b2cbf', '#f15bb5', '#caf0f8', '#ffffff'], speed: 0.9, up: 1.8, size: 0.06, life: 1.1, gravity: 3 });
+      }
+    }
+    // silbido cuando un tentáculo se te acerca
+    const me = fx.me;
+    if (!me.out) {
+      const pa = Math.atan2(me.y, me.x), pr = Math.hypot(me.x, me.y);
+      W.armsAt(t1).forEach((arm, k) => {
+        if (pr > arm.L) return;
+        const ahead = wrap((pa - arm.a) * Math.sign(arm.w));
+        const key = 'w' + k;
+        if (ahead > 0 && ahead < 0.55) { if (!st[key]) { st[key] = 1; fx.sfx.whoosh(0.9); } }
+        else if (ahead < 0 || ahead > 1.2) st[key] = 0;
+      });
+    }
+    // agua saliendo del agujero
+    if (Math.floor(t1 * 3) !== Math.floor(t0 * 3)) fx.burst(0, 0.02, 0, { n: 5, color: ['#caf0f8', '#90e0ef'], speed: 0.22, up: 0.9, size: 0.04, life: 0.7, gravity: 2.5 });
+  },
+
   // ---------------- 3D
   scene3d: {
     sky: '#8ecae6',

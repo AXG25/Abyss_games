@@ -17,6 +17,7 @@
 //   draw(g, view, t, W, ents, meId)       dibuja el escenario y las entidades
 //   opcionales: pack(p) → datos extra en red, hud(p), banner(t, W), sounds
 import { beep, buzz } from './util.js';
+import { sfx, say, music, stopMusic, musicTempo } from './audio.js';
 
 export const DT = 1 / 60;
 export const TAU = Math.PI * 2;
@@ -112,14 +113,21 @@ export const USE_2D = () => { try { return localStorage.getItem('pp_2d') === '1'
 export function preload3D() { if (!USE_2D()) import('./rt3d.js').catch(() => {}); }
 
 const SOUNDS = {
-  act: () => beep(520, 0.08, 'triangle'),
-  hit: () => { beep(150, 0.25, 'sawtooth', 0.08); buzz(150); },
-  out: () => { beep(110, 0.5, 'sawtooth', 0.08); buzz(400); },
-  coin: () => beep(1320, 0.07, 'square', 0.05),
-  big: () => { beep(988, 0.08, 'square', 0.06); setTimeout(() => beep(1568, 0.12, 'square', 0.06), 80); },
-  fall: () => { beep(400, 0.4, 'sine', 0.08); buzz(200); },
-  got: () => { beep(220, 0.15, 'square', 0.07); buzz(120); },
+  act: (G) => (G.action === 'SALTA' ? sfx.jump() : sfx.dash()),
+  hit: () => { sfx.hit(); buzz(150); },
+  out: () => { sfx.out(); buzz(400); },
+  coin: () => sfx.coin(),
+  big: () => sfx.big(),
+  fall: () => { sfx.fall(); buzz(200); },
+  got: () => { sfx.pass(); buzz(120); },
 };
+// Efectos visuales de mis eventos (los demás los detecta la vista 3D).
+const FX_ME = {
+  coin: (v, p) => v.burst(p.x, 0.12, p.y, { n: 14, color: ['#ffd60a', '#fff3b0', '#ffffff'], speed: 0.5, up: 1, size: 0.04, life: 0.6, gravity: 2 }),
+  big: (v, p) => { v.burst(p.x, 0.12, p.y, { n: 40, color: ['#ffb703', '#ffd60a', '#ffffff'], speed: 0.9, up: 1.6, size: 0.05, life: 0.9, gravity: 2 }); v.shake(0.02); },
+};
+// Sonidos (más bajitos) de lo que les pasa a los demás jugadores.
+const OTHER = { jump: (v) => sfx.jump(v), hit: (v) => sfx.hit(v), out: (v) => sfx.hit(v), fall: (v) => sfx.splash(v), dash: (v) => sfx.dash(v) };
 
 export function mountRT(el, ctx, G) {
   el.innerHTML = `
@@ -170,7 +178,7 @@ export function mountRT(el, ctx, G) {
     import('./rt3d.js').then((m) => {
       if (dead || !m.webglOK()) return;
       try {
-        v3 = m.createView3D(board, G, W);
+        v3 = m.createView3D(board, G, W, { meId: ctx.me, onEvent: (type, e, isMe) => { if (!isMe && OTHER[type]) OTHER[type](0.35); } });
         canvas.style.display = 'none';
       } catch (e) { console.warn('3D no disponible', e); v3 = null; }
     }).catch((e) => console.warn('3D no disponible', e));
@@ -237,10 +245,10 @@ export function mountRT(el, ctx, G) {
       if (!lv || !colorOf[id]) continue;
       if (lv.hs && typeof lv.hs === 'object' && !ctx.isHost) ext.hs = lv.hs;
       if (lv.over) ext.over = true;
-      out.push({ id, x: +lv.x || 0, y: +lv.y || 0, z: +lv.z || 0, h: lv.h, out: !!lv.out, inv: lv.inv, e: lv.e });
+      out.push({ id, x: +lv.x || 0, y: +lv.y || 0, z: +lv.z || 0, h: lv.h, out: !!lv.out, inv: lv.inv, e: lv.e, d: lv.d });
       if (Array.isArray(lv.b)) {
         for (const b of lv.b) {
-          if (Array.isArray(b) && colorOf[b[0]]) out.push({ id: b[0], x: +b[1] || 0, y: +b[2] || 0, z: +b[3] || 0, h: b[4], out: !!b[5], inv: b[6], e: b[7] });
+          if (Array.isArray(b) && colorOf[b[0]]) out.push({ id: b[0], x: +b[1] || 0, y: +b[2] || 0, z: +b[3] || 0, h: b[4], out: !!b[5], inv: b[6], e: b[7], d: b[8] });
         }
       }
     }
@@ -259,6 +267,18 @@ export function mountRT(el, ctx, G) {
   let simT = 0;
   let last = performance.now();
   const mountAt = last;
+  let prevT = 0;
+  let tempoUp = false;
+  const ents0 = () => [me, ...bots.map((b) => b.p), ...ext.remote || []];
+  const fx = {
+    sfx, say, me,
+    burst: (x, y, z, o) => v3 && v3.burst(x, y, z, o),
+    shake: (a) => v3 && v3.shake(a),
+    // volumen según la distancia a mi jugador
+    near: (x, y) => Math.max(0.25, Math.min(1, 1.2 - Math.hypot(x - me.x, y - me.y) * 0.8)),
+    st: {},
+  };
+  if (G.music) music(G.music);
   let lastPub = 0;
   let raf = 0;
   let finished = false;
@@ -297,7 +317,8 @@ export function mountRT(el, ctx, G) {
         iy = (keys.has('ArrowDown') || keys.has('s') ? 1 : 0) - (keys.has('ArrowUp') || keys.has('w') ? 1 : 0);
       }
       const ev = G.step(me, { x: ix, y: iy }, simT, W, ext);
-      if (ev && SOUNDS[ev]) SOUNDS[ev]();
+      if (ev && SOUNDS[ev]) SOUNDS[ev](G);
+      if (ev && v3 && FX_ME[ev]) FX_ME[ev](v3, me);
       if (ev === 'hit') showMsg('¡Ay! 💥', 700);
       if (ev === 'fall') showMsg(G.fallText || '¡Al agua! 🌊', 900);
       if (ev === 'got') showMsg('💣 ¡Tienes la bomba!', 900);
@@ -321,19 +342,26 @@ export function mountRT(el, ctx, G) {
       simT += DT;
       acc -= DT;
     }
+    // eventos del mundo (explosiones, choques, rugidos…): sonido y efectos
+    if (G.events) {
+      try { G.events(prevT, simT, W, ext, ents0(), fx); } catch (e) { console.warn(e); }
+    }
+    prevT = simT;
+    if (!tempoUp && simT > G.TOTAL * 0.7) { tempoUp = true; musicTempo(1.18); }
     if ((simT >= G.TOTAL || ext.over) && !finished) {
       finished = true;
-      if (!me.out) { showMsg(G.endText ? G.endText(me) : ext.over ? '🏆 ¡Quedaste en pie!' : '🎉 ¡Sobreviviste!', 0); beep(880, 0.2, 'triangle'); }
+      stopMusic();
+      if (!me.out) { showMsg(G.endText ? G.endText(me) : ext.over ? '🏆 ¡Quedaste en pie!' : '🎉 ¡Sobreviviste!', 0); sfx.win(); if (v3) v3.burst(me.x, 0.3, me.y, { n: 60, color: ['#ffd60a', '#ff4d6d', '#3a86ff', '#06d6a0', '#ffffff'], speed: 1, up: 2, size: 0.05, life: 1.6, gravity: 2.5 }); }
       for (const b of bots) saveBot(b);
       submit();
     }
     if (now - lastPub > 66) {
       lastPub = now;
-      const lv = { x: r3(me.x), y: r3(me.y), z: r3(me.z || 0), h: me.h, out: me.out ? 1 : 0, inv: me.inv > 0 ? 1 : 0 };
+      const lv = { x: r3(me.x), y: r3(me.y), z: r3(me.z || 0), h: me.h, out: me.out ? 1 : 0, inv: me.inv > 0 ? 1 : 0, d: me.dash > 0 || me.push > 0 ? 1 : 0 };
       if (G.pack) lv.e = G.pack(me);
       if (ctx.isHost && ext.hs) lv.hs = ext.hs;
       if (ctx.isHost && ext.over) lv.over = 1;
-      if (bots.length) lv.b = bots.map((b) => [b.id, r3(b.p.x), r3(b.p.y), r3(b.p.z || 0), b.p.h, b.p.out ? 1 : 0, b.p.inv > 0 ? 1 : 0, G.pack ? G.pack(b.p) : null]);
+      if (bots.length) lv.b = bots.map((b) => [b.id, r3(b.p.x), r3(b.p.y), r3(b.p.z || 0), b.p.h, b.p.out ? 1 : 0, b.p.inv > 0 ? 1 : 0, G.pack ? G.pack(b.p) : null, b.p.dash > 0 || b.p.push > 0 ? 1 : 0]);
       ctx.live(lv);
     }
     const ents = [];
@@ -369,6 +397,7 @@ export function mountRT(el, ctx, G) {
 
   return () => {
     dead = true;
+    stopMusic();
     if (v3) { try { v3.dispose(); } catch { /* nada */ } }
     cancelAnimationFrame(raf);
     ro.disconnect();

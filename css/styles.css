@@ -275,3 +275,4 @@ input:focus { border-color: var(--yellow); }
 .k-top[hidden] { display: none; }
 .k-msg, .k-banner { z-index: 3; }
 .gfx { align-self: center; }
+.mute { background: rgba(255, 255, 255, 0.12); border-radius: 99px; width: 38px; height: 38px; font-size: 18px; margin-left: auto; margin-right: 8px; }

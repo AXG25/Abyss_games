@@ -125,6 +125,28 @@ export const G = {
   },
   hud: (p) => (p.out ? '👻' : '⛸️'),
 
+  music: 'ice',
+  events(t0, t1, W, ext, ents, fx) {
+    const tiles = ext.tiles;
+    if (!tiles) return;
+    const st = fx.st;
+    st.seen = st.seen || new Set();
+    st.sunk = st.sunk || new Set();
+    for (const [k, ts] of tiles) {
+      const [x, y] = center(k);
+      if (!st.seen.has(k)) {
+        st.seen.add(k);
+        if (t1 - (st.lc || 0) > 0.12) { st.lc = t1; fx.sfx.crack(fx.near(x, y) * 0.7); }
+        fx.burst(x, 0.02, y, { n: 6, color: ['#ffffff', '#caf0f8'], speed: 0.3, up: 0.4, size: 0.03, life: 0.4, gravity: 2 });
+      }
+      if (!st.sunk.has(k) && t1 - ts > CRACK) {
+        st.sunk.add(k);
+        if (t1 - (st.ls || 0) > 0.15) { st.ls = t1; fx.sfx.splash(0.3 * fx.near(x, y)); }
+        fx.burst(x, -0.05, y, { n: 8, color: ['#caf0f8', '#90e0ef', '#ffffff'], speed: 0.3, up: 1, size: 0.045, life: 0.6, gravity: 3, spread: TS * 0.5 });
+      }
+    }
+  },
+
   PR,
   scene3d: {
     sky: '#cdeffd',

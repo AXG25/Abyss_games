@@ -1,4 +1,5 @@
 // Utilidades compartidas: RNG con semilla, DOM, sonido y vibración.
+import { ctx as actx, bus as abus } from './audio.js';
 
 export function mulberry32(seed) {
   let a = seed >>> 0;
@@ -26,18 +27,18 @@ export function esc(s) {
 export const $ = (sel, el = document) => el.querySelector(sel);
 export const $$ = (sel, el = document) => [...el.querySelectorAll(sel)];
 
-let ac = null;
 export function beep(freq = 660, dur = 0.08, type = 'square', vol = 0.05) {
   try {
-    ac = ac || new (window.AudioContext || window.webkitAudioContext)();
-    if (ac.state === 'suspended') ac.resume();
+    const ac = actx();
+    const out = abus();
+    if (!ac || !out) return;
     const o = ac.createOscillator();
     const g = ac.createGain();
     o.type = type;
     o.frequency.value = freq;
     g.gain.value = vol;
     o.connect(g);
-    g.connect(ac.destination);
+    g.connect(out);
     const t = ac.currentTime;
     g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
     o.start(t);

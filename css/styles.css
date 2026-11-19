@@ -546,3 +546,18 @@ input:focus { border-color: var(--yellow); }
 @keyframes swrCool { from { transform: scaleY(1); } to { transform: scaleY(0); } }
 .swr-btn.off { filter: grayscale(0.8) brightness(0.6); }
 .ver { text-align: center; font-size: 11px; opacity: 0.4; margin: 0; }
+/* enlace a Instagram: píldora con el borde degradado de Instagram */
+.insta {
+  align-self: center; display: inline-flex; align-items: center; gap: 8px;
+  padding: 7px 16px 7px 8px; margin: 6px auto 2px; border-radius: 999px;
+  color: #fff; text-decoration: none; font-weight: 800; font-size: 14px;
+  border: 2px solid transparent;
+  background: linear-gradient(var(--bg1), var(--bg1)) padding-box,
+    linear-gradient(45deg, #feda75, #fa7e1e, #d62976, #962fbf, #4f5bd5) border-box;
+  -webkit-tap-highlight-color: transparent; transition: transform .12s;
+}
+.insta:active { transform: scale(0.95); }
+.insta .ic { width: 26px; height: 26px; flex: none; }
+.insta span { display: flex; flex-direction: column; line-height: 1.15; text-align: left; }
+.insta small { font-weight: 700; font-size: 11px; opacity: .75; }
+.final .insta { margin-top: 14px; }

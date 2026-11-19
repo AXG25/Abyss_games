@@ -104,6 +104,7 @@ function renderHome() {
       <button class="btn ghost sm gfx" id="gfx"></button>
       <div class="open-rooms"></div>
       <p class="hint" id="hint"></p>
+      ${instaLink()}
       <p class="ver">versión ${esc((document.documentElement.dataset.v || 'dev').slice(0, 6))}</p>
     </section>`;
   updateNetPill();
@@ -538,10 +539,17 @@ function renderFinal(st) {
       }).join('')}</div>
       ${sorted[3] ? `<p class="hint">4. ${esc(sorted[3].n)} · ${sorted[3].s} ${icon('star')}</p>` : ''}
       <div id="final-ctl"></div>
+      ${instaLink('¿Te gustó? Síguenos en Instagram')}
     </section>`;
   fanfare();
   setTimeout(fanfare, 700);
   renderFinalControls(st);
+}
+
+// Enlace al Instagram de Abyss Games (se abre en otra pestaña o en la app de Instagram)
+const INSTA_USER = 'the_abyss_2504';
+function instaLink(text = '') {
+  return `<a class="insta" href="https://www.instagram.com/${INSTA_USER}/" target="_blank" rel="noopener">${icon('insta')}<span>${text ? `${esc(text)}<small>@${INSTA_USER}</small>` : `@${INSTA_USER}`}</span></a>`;
 }
 
 function renderFinalControls() {

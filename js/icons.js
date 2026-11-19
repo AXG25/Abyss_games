@@ -185,6 +185,7 @@ const I = {
   fish: '<path d="M3 12c3-5 9-6 13-3l5-3v12l-5-3c-4 3-10 2-13-3z" fill="#ff9f1c" stroke="#1b1035" stroke-width="1.5" stroke-linejoin="round"/><circle cx="8" cy="11" r="1.3" fill="#1b1035"/>',
   mushroom: '<path d="M3 12a9 8 0 0118 0z" fill="#ff4d6d" stroke="#1b1035" stroke-width="1.5"/><circle cx="8" cy="9" r="1.6" fill="#fff"/><circle cx="14" cy="7.5" r="1.4" fill="#fff"/><circle cx="17" cy="10.5" r="1.1" fill="#fff"/><path d="M9 12h6v6a3 3 0 01-6 0z" fill="#fff3e0" stroke="#1b1035" stroke-width="1.5"/>',
   diamond: '<path d="M12 3l8 9-8 9-8-9z" fill="#c77dff" stroke="#1b1035" stroke-width="1.5" stroke-linejoin="round"/>',
+  insta: '<defs><linearGradient id="ig-g" x1="0" y1="1" x2="1" y2="0"><stop offset="0" stop-color="#feda75"/><stop offset=".35" stop-color="#fa7e1e"/><stop offset=".6" stop-color="#d62976"/><stop offset=".85" stop-color="#962fbf"/><stop offset="1" stop-color="#4f5bd5"/></linearGradient></defs><rect x="2.5" y="2.5" width="19" height="19" rx="5.5" fill="url(#ig-g)" stroke="#1b1035" stroke-width="1.5"/><rect x="6" y="6" width="12" height="12" rx="3.6" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="12" cy="12" r="2.9" fill="none" stroke="#fff" stroke-width="1.8"/><circle cx="16.3" cy="7.7" r="1.05" fill="#fff"/>',
   cloud: '<path d="M7 18a4 4 0 010-8 5.5 5.5 0 0110.5 1.5A3.3 3.3 0 0117 18z" fill="#fff" stroke="#1b1035" stroke-width="1.5" stroke-linejoin="round"/>',
 };
 

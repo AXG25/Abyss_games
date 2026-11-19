@@ -438,7 +438,7 @@ export function mountRT(el, ctx, G) {
     if (key !== lastBanner) {
       lastBanner = key;
       banner.hidden = !bn;
-      if (bn) { banner.innerHTML = rich(bn.text); banner.style.background = bn.color; beep(660, 0.1, 'triangle'); }
+      if (bn) { banner.innerHTML = rich(bn.text); banner.style.background = bn.color; banner.style.color = bn.fg || '#fff'; banner.style.textShadow = bn.fg && bn.fg !== '#fff' && bn.fg !== '#ffffff' ? 'none' : ''; beep(660, 0.1, 'triangle'); }
     }
     raf = requestAnimationFrame(frame);
   };

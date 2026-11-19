@@ -11,12 +11,32 @@ const HALF = 0.9;
 const TS = (HALF * 2) / N;
 const PR = 0.055;
 const DROP = 1.3;
+// Colores vivos que se distinguen por tono Y por brillo, y cada uno con su
+// figura propia: así se puede jugar aunque no se distingan los colores.
 const COLORS = [
-  { n: 'ROJO', c: '#ef476f' },
-  { n: 'AZUL', c: '#118ab2' },
-  { n: 'AMARILLO', c: '#ffd166' },
-  { n: 'VERDE', c: '#06d6a0' },
+  { n: 'AMARILLO', c: '#ffd000', fg: '#1b1035', sym: 'star', icon: 'symStar' },
+  { n: 'NARANJA', c: '#ff5a00', fg: '#ffffff', sym: 'tri', icon: 'symTri' },
+  { n: 'AZUL', c: '#0047ff', fg: '#ffffff', sym: 'circle', icon: 'symCircle' },
+  { n: 'CELESTE', c: '#2fe0ff', fg: '#1b1035', sym: 'square', icon: 'symSquare' },
 ];
+
+// dibuja la figura de un color centrada en (cx, cy) con radio r
+function drawSym(g, sym, cx, cy, r, fill, line) {
+  g.beginPath();
+  if (sym === 'circle') g.arc(cx, cy, r * 0.82, 0, Math.PI * 2);
+  else if (sym === 'square') g.rect(cx - r * 0.72, cy - r * 0.72, r * 1.44, r * 1.44);
+  else if (sym === 'tri') { g.moveTo(cx, cy - r * 0.9); g.lineTo(cx + r * 0.95, cy + r * 0.72); g.lineTo(cx - r * 0.95, cy + r * 0.72); g.closePath(); }
+  else {
+    for (let i = 0; i < 10; i++) {
+      const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.42 : r;
+      g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr);
+    }
+    g.closePath();
+  }
+  g.fillStyle = fill;
+  g.fill();
+  if (line) { g.lineWidth = Math.max(2, r * 0.12); g.strokeStyle = line; g.lineJoin = 'round'; g.stroke(); }
+}
 
 const tileAt = (x, y) => {
   const i = Math.floor((x + HALF) / TS), j = Math.floor((y + HALF) / TS);
@@ -125,7 +145,7 @@ const G = {
     const rd = roundAt(W, t);
     if (!rd || t >= rd.drop + DROP) return null;
     const col = COLORS[rd.c];
-    return { text: t < rd.drop ? `¡${col.n}! ${Math.ceil(rd.drop - t)}` : `¡${col.n}!`, color: col.c };
+    return { text: `{${col.icon}} ` + (t < rd.drop ? `¡${col.n}! ${Math.ceil(rd.drop - t)}` : `¡${col.n}!`), color: col.c, fg: col.fg };
   },
 
   music: 'disco',
@@ -163,8 +183,25 @@ const G = {
       scene.add(water);
       S.objs.water = water;
       S.objs.wBase = Float32Array.from(water.geometry.attributes.position.array);
-      const geo = new THREE.BoxGeometry(TS * 0.93, 0.14, TS * 0.93);
-      S.objs.mats = COLORS.map((c) => new THREE.MeshStandardMaterial({ color: c.c, roughness: 0.4 }));
+      const geo = new THREE.BoxGeometry(TS * 0.9, 0.14, TS * 0.9);
+      // cara de arriba: color vivo + su figura; costados un poco más oscuros
+      S.objs.mats = COLORS.map((c) => {
+        const cv = document.createElement('canvas');
+        cv.width = cv.height = 256;
+        const g = cv.getContext('2d');
+        g.fillStyle = c.c;
+        g.fillRect(0, 0, 256, 256);
+        g.fillStyle = 'rgba(255,255,255,0.18)';
+        g.fillRect(0, 0, 256, 18);
+        g.fillStyle = 'rgba(0,0,0,0.18)';
+        g.fillRect(0, 238, 256, 18);
+        drawSym(g, c.sym, 128, 132, 78, c.fg, c.fg === '#ffffff' ? '#1b1035' : null);
+        const tex = new THREE.CanvasTexture(cv);
+        tex.colorSpace = THREE.SRGBColorSpace;
+        const top = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.45 });
+        const side = new THREE.MeshStandardMaterial({ color: new THREE.Color(c.c).multiplyScalar(0.6), roughness: 0.5 });
+        return [side, side, top, side, side, side];
+      });
       S.objs.tiles = Array.from({ length: N * N }, (_, k) => {
         const m = new THREE.Mesh(geo, S.objs.mats[0]);
         const [x, y] = center(k);
@@ -173,14 +210,6 @@ const G = {
         m.castShadow = true;
         scene.add(m);
         return m;
-      });
-      // marco para los buenos
-      const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(TS * 0.95, 0.15, TS * 0.95));
-      S.objs.glow = Array.from({ length: N * N }, (_, k) => {
-        const l = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: '#ffffff' }));
-        l.position.copy(S.objs.tiles[k].position);
-        scene.add(l);
-        return l;
       });
     },
     update(S, t, W) {
@@ -203,9 +232,6 @@ const G = {
         if (!good && dropT >= 0 && dropT < DROP) yy = -0.07 - Math.min(1.5, dropT * dropT * 6);
         if (!good && dropT >= DROP) yy = -0.07 - Math.max(0, 1.5 - (dropT - DROP) * 6);
         m.position.set(x + dx, yy, y + dz);
-        o.glow[k].visible = good && dropT < DROP;
-        o.glow[k].position.copy(m.position);
-        o.glow[k].scale.setScalar(1 + 0.03 * Math.sin(t * 10));
       }
     },
   },
@@ -236,17 +262,12 @@ const G = {
       if (warn && !isGood) { x += Math.sin(t * 60 + k) * 2; y += Math.cos(t * 50 + k) * 2; }
       g.fillStyle = 'rgba(0,0,0,0.3)';
       g.fillRect(x + 3, y + 6, ts - 4, ts - 4);
-      g.fillStyle = COLORS[ci].c;
-      g.globalAlpha = !isGood && t < rd.drop ? 0.75 : 1;
+      const col = COLORS[ci];
+      g.fillStyle = col.c;
       g.beginPath();
-      if (g.roundRect) g.roundRect(x + 2, y + 2, ts - 4, ts - 4, 8); else g.rect(x + 2, y + 2, ts - 4, ts - 4);
+      if (g.roundRect) g.roundRect(x + 3, y + 3, ts - 6, ts - 6, 8); else g.rect(x + 3, y + 3, ts - 6, ts - 6);
       g.fill();
-      g.globalAlpha = 1;
-      if (isGood && t < rd.drop + DROP) {
-        g.lineWidth = 3 + 2 * Math.sin(t * 10);
-        g.strokeStyle = '#fff';
-        g.stroke();
-      }
+      drawSym(g, col.sym, x + ts / 2, y + ts / 2, ts * 0.28, col.fg, col.fg === '#ffffff' ? '#1b1035' : null);
     }
     for (const e of ents) {
       if (e.out) continue;
@@ -261,7 +282,7 @@ export default {
   id: 'tiles',
   name: 'Pisa el color',
   realtime: true,
-  desc: 'Se anuncia un color y empieza la cuenta: corre a una baldosa de ese color antes de que las demás se caigan al agua. Cada vez hay menos tiempo. 2 vidas.',
+  desc: 'Se anuncia un color (cada uno tiene su figura: estrella, triángulo, círculo o cuadrado). Corre a una baldosa de ese color antes de que las demás se caigan al agua. Cada vez hay menos tiempo. 2 vidas.',
   dur: () => TOTAL * 1000,
   mount: (el, ctx) => mountRT(el, ctx, G),
   evaluate: (v) => evalSurvival(v, TOTAL, LIVES),

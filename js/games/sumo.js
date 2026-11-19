@@ -47,8 +47,8 @@ const G = {
       let dx = inp.x, dy = inp.y;
       if (Math.hypot(dx, dy) < 0.2) { dx = p.ldx || p.vx || 0; dy = p.ldy || p.vy || 1; }
       const l = Math.hypot(dx, dy) || 1;
-      p.vx += (dx / l) * 1.7; p.vy += (dy / l) * 1.7;
-      p.push = 0.32; p.pcd = 1.1;
+      p.vx += (dx / l) * 2.2; p.vy += (dy / l) * 2.2;
+      p.push = 0.36; p.pcd = 1.1;
       ev = 'act';
     }
     p.act = false;
@@ -57,14 +57,17 @@ const G = {
     if (p.inv > 0) p.inv -= DT;
     const il = Math.hypot(inp.x, inp.y);
     if (il > 0.2) { p.ldx = inp.x / il; p.ldy = inp.y / il; }
-    p.vx += inp.x * 3.2 * DT;
-    p.vy += inp.y * 3.2 * DT;
+    // aturdido tras un golpe fuerte: casi no se controla y sale deslizando
+    if (p.stun > 0) p.stun -= DT;
+    const ctl = p.stun > 0 ? 0.15 : 1;
+    p.vx += inp.x * 3.2 * DT * ctl;
+    p.vy += inp.y * 3.2 * DT * ctl;
     // el estadio es cóncavo: empuja suavemente hacia el centro
     p.vx -= p.x * 0.9 * DT;
     p.vy -= p.y * 0.9 * DT;
-    const fr = Math.pow(0.18, DT);
+    const fr = Math.pow(p.stun > 0 ? 0.6 : 0.18, DT);
     p.vx *= fr; p.vy *= fr;
-    const sp = Math.hypot(p.vx, p.vy), max = p.push > 0 ? 2.3 : 0.8;
+    const sp = Math.hypot(p.vx, p.vy), max = p.push > 0 ? 3.0 : p.stun > 0 ? 2.6 : 0.8;
     if (sp > max) { p.vx *= max / sp; p.vy *= max / sp; }
     // choques (cada uno se mueve a sí mismo)
     if (ext && ext.all && p.inv <= 0) {
@@ -77,12 +80,13 @@ const G = {
         const theyPush = o.push > 0 || (o.e && o.e.p) || o.d;
         const mePush = p.push > 0;
         // rebote metálico: siempre rebotan; el que embiste sale menos despedido
-        const k = theyPush ? (mePush ? 1.4 : 2.4) : (mePush ? 0.5 : 1.1);
+        // empujón fuerte si te embisten; rebote normal si solo chocan
+        const k = theyPush ? (mePush ? 2.0 : 3.6) : (mePush ? 0.6 : 1.4);
         if (!p._clash || p._clash <= 0) {
           p.vx += nx * k;
           p.vy += ny * k;
           p._clash = 0.12;
-          if (theyPush && !mePush) ev = ev || 'hit';
+          if (theyPush && !mePush) { ev = ev || 'hit'; p.stun = 0.45; }
         }
         const over = PR * 2 - d;
         p.x += nx * over * 0.5; p.y += ny * over * 0.5;
@@ -132,6 +136,7 @@ const G = {
     const o = {};
     if (p.push > 0) o.p = 1;
     if (p.fall > 0) o.f = Math.round(p.scale * 100) / 100;
+    if (p.stun > 0) o.s = 1;
     return o;
   },
 
@@ -159,9 +164,12 @@ const G = {
         const mine = a === fx.me || b === fx.me;
         const strong = a.push > 0 || b.push > 0 || a.d || b.d || (a.e && a.e.p) || (b.e && b.e.p);
         fx.sfx.clang(mine ? 1 : 0.5);
+        if (strong) fx.sfx.boom(mine ? 0.35 : 0.2);
         const mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-        fx.burst(mx, 0.08, my, { n: strong ? 40 : 20, color: ['#ffd60a', '#ffffff', '#ff9f1c'], speed: strong ? 1.4 : 0.9, up: 0.8, size: 0.035, life: 0.45, gravity: 3, drag: 2 });
-        if (mine) fx.shake(strong ? 0.06 : 0.03);
+        fx.burst(mx, 0.08, my, { n: strong ? 60 : 20, color: ['#ffd60a', '#ffffff', '#ff9f1c'], speed: strong ? 1.9 : 0.9, up: 0.8, size: strong ? 0.045 : 0.035, life: 0.5, gravity: 3, drag: 2 });
+        // onda de choque en el piso
+        if (strong) fx.burst(mx, 0.03, my, { n: 36, color: ['#ffffff', '#c77dff'], speed: 2.4, up: 0.05, size: 0.04, life: 0.35, gravity: 0, drag: 4 });
+        if (mine) fx.shake(strong ? 0.1 : 0.035);
       }
     }
   },
@@ -284,7 +292,8 @@ const G = {
           a.spinA = (a.spinA || 0) + dt * 28 * fast;
           top.rotation.y = a.spinA;
           // bamboleo: más cuando lo golpean o se cae
-          const wob = (s.inv ? 0.35 : 0.06) + (s.scale < 0.98 ? 0.6 : 0);
+          const stunned = en.stun > 0 || (en.e && en.e.s);
+          const wob = (s.inv ? 0.35 : stunned ? 0.5 : 0.06) + (s.scale < 0.98 ? 0.6 : 0);
           top.rotation.x = Math.sin(t * 9) * wob;
           top.rotation.z = Math.cos(t * 9) * wob;
           speedRing.material.opacity = s.dashing ? 0.7 : 0;

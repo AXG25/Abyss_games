@@ -11,13 +11,27 @@ import { icon, rich } from '../icons.js';
 import { sfx, say } from '../audio.js';
 import { USE_2D } from '../rt.js';
 
-const waitFor = (seed) => 1500 + mulberry32(seed)() * 3500;
+const ROUNDS = 3;
+const R_INTRO = 1500;  // ms de "Ronda N" antes de cada duelo
 const WINDOW = 1400;   // ms después del ¡FUEGO! para decidir al ganador
-const SHOW = 3000;     // ms de animación del duelo
+const SHOW = 2800;     // ms de animación del duelo
+// horario de las rondas (igual en todos los teléfonos)
+function schedule(seed) {
+  const r = mulberry32(seed);
+  const out = [];
+  let t = 0;
+  for (let k = 0; k < ROUNDS; k++) {
+    const wait = 1500 + r() * 2600;
+    const go = t + R_INTRO + wait;
+    out.push({ start: t, go, resolve: go + WINDOW, end: go + WINDOW + SHOW });
+    t = go + WINDOW + SHOW;
+  }
+  return out;
+}
 
 const hash = (s) => { let h = 2166136261; for (const ch of String(s)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; };
-function botResult(seed, id) {
-  const r = mulberry32((seed ^ hash(id)) >>> 0);
+function botResult(seed, id, k = 0) {
+  const r = mulberry32((seed ^ hash(id) ^ Math.imul(k + 1, 0x9e3779b9)) >>> 0);
   return r() < 0.1 ? { f: 1 } : { ms: Math.round(230 + r() * 260) };
 }
 const valid = (v) => v && !v.f && typeof v.ms === 'number' && v.ms >= 80;
@@ -26,8 +40,8 @@ export default {
   id: 'reflex',
   name: 'Reflejos de vaquero',
   uses3d: true,
-  desc: '¡Duelo en el viejo oeste! Espera la campana y el ¡FUEGO!, y toca la pantalla lo más rápido posible: el más rápido tumba a todos. Si disparas antes, se te cae el revólver.',
-  dur: (seed) => waitFor(seed) + WINDOW + SHOW,
+  desc: '¡Duelo en el viejo oeste, a 3 rondas! Espera la campana y el ¡FUEGO!, y toca la pantalla lo más rápido posible: el más rápido tumba a todos. Si disparas antes, se te cae el revólver. Gana quien gane más duelos.',
+  dur: (seed) => schedule(seed)[ROUNDS - 1].end,
 
   mount(el, ctx) {
     let webgl = false;
@@ -36,24 +50,49 @@ export default {
     return mount3D(el, ctx);
   },
 
+  // gana quien gane más duelos; si empatan, el que sumó menos tiempo
+  evaluateAll(vals, seed, pl) {
+    const wins = {}, total = {}, any = {};
+    for (const p of pl) { wins[p.id] = 0; total[p.id] = 0; any[p.id] = false; }
+    for (let k = 0; k < ROUNDS; k++) {
+      const res = pl.map((p) => {
+        const v = vals[p.id] && Array.isArray(vals[p.id].r) ? vals[p.id].r[k] : null;
+        if (v) any[p.id] = true;
+        return [p.id, v];
+      });
+      let best = Infinity;
+      for (const [, v] of res) if (valid(v)) best = Math.min(best, v.ms);
+      for (const [id, v] of res) {
+        if (valid(v) && v.ms === best) wins[id]++;
+        total[id] += valid(v) ? v.ms : 1500;
+      }
+    }
+    const out = {};
+    for (const p of pl) {
+      out[p.id] = any[p.id]
+        ? { score: wins[p.id] * 1e6 - total[p.id], label: `${wins[p.id]} de ${ROUNDS} duelos · ${Math.round(total[p.id] / ROUNDS)} ms prom.` }
+        : null;
+    }
+    return out;
+  },
   evaluate(v) {
-    if (!v) return null;
-    if (v.f) return { score: null, label: '{cross} Disparó antes' };
-    if (typeof v.ms !== 'number' || v.ms < 80) return { score: null, label: '{cross} Disparó antes' };
-    return { score: -v.ms, label: `${Math.round(v.ms)} ms` };
+    if (!v || !Array.isArray(v.r)) return null;
+    const t = v.r.reduce((a, x) => a + (valid(x) ? x.ms : 1500), 0);
+    return { score: -t, label: `${Math.round(t / ROUNDS)} ms prom.` };
   },
 
-  bot: (r, seed, p) => botResult(seed, p?.id || 'bot0'),
+  bot: (r, seed, p) => ({ r: [0, 1, 2].map((k) => botResult(seed, p?.id || 'bot0', k)) }),
 };
 
 // ---------------------------------------------------------------- 3D
 function mount3D(el, ctx) {
-  const wait = waitFor(ctx.seed);
+  const plan = schedule(ctx.seed);
   el.innerHTML = `
     <div class="duel">
       <div class="duel-stage"></div>
-      <div class="duel-top">Espera la campana…</div>
+      <div class="duel-top">Ronda 1 de ${ROUNDS}</div>
       <div class="duel-flash" hidden>¡FUEGO!</div>
+      <div class="duel-score"></div>
       <div class="duel-me"></div>
       <button class="duel-tap" aria-label="Disparar"></button>
     </div>`;
@@ -61,77 +100,94 @@ function mount3D(el, ctx) {
   const top = el.querySelector('.duel-top');
   const flash = el.querySelector('.duel-flash');
   const meEl = el.querySelector('.duel-me');
+  const scoreEl = el.querySelector('.duel-score');
   const tapBtn = el.querySelector('.duel-tap');
   let dead = false;
-  let cleanup = () => {};
   const t0 = performance.now();
-  let goAt = 0;
-  let myRes = null;
+  let k = -1;            // ronda actual
+  let goAt = 0;          // momento del ¡FUEGO! de esta ronda
+  let resolved = false;
+  const myRes = [null, null, null];
+  const wins = Object.fromEntries(ctx.players.map((p) => [p.id, 0]));
+  let scene = null;
+
+  const paintScore = () => {
+    scoreEl.innerHTML = ctx.players.map((p) => `<span style="--c:${p.c}">${escapeHTML(p.n)} <b>${'●'.repeat(wins[p.id])}${'○'.repeat(Math.max(0, ROUNDS - wins[p.id]))}</b></span>`).join('');
+  };
+  paintScore();
 
   const tap = (e) => {
     e.preventDefault();
-    if (myRes) return;
+    if (k < 0 || myRes[k] || resolved) return;
     const now = performance.now();
+    if (now < t0 + plan[k].start + R_INTRO * 0.6) return; // aún no empieza la ronda
     if (!goAt || now < goAt) {
-      myRes = { f: 1 };
+      myRes[k] = { f: 1 };
       top.innerHTML = rich('{cross} ¡Muy pronto! Se te cayó el revólver');
       sfx.click();
       buzz(200);
     } else {
-      myRes = { ms: Math.round(now - goAt) };
-      meEl.textContent = `${myRes.ms} ms`;
+      myRes[k] = { ms: Math.round(now - goAt) };
+      meEl.textContent = `${myRes[k].ms} ms`;
       buzz(40);
     }
-    ctx.submit(myRes);
-    if (scene) scene.onTap(myRes);
+    ctx.submit({ r: myRes });
+    if (scene) scene.onTap(myRes[k]);
   };
   tapBtn.addEventListener('pointerdown', tap);
 
-  let scene = null;
   import('../rt3d.js').then((m) => {
     if (dead) return;
-    try { scene = buildDuel(m, stage, ctx, wait); } catch (e) { console.warn(e); }
+    try { scene = buildDuel(m, stage, ctx, t0); if (k >= 0) scene.newRound(k, plan[k].go); } catch (e) { console.warn(e); }
   });
 
-  // reloj del duelo
-  let resolved = false;
   let lastBeat = 0;
-  sfx.wind(0.8);
   const iv = setInterval(() => {
     const t = performance.now() - t0;
-    // latidos de tensión mientras se espera
-    if (!goAt && t - lastBeat > Math.max(380, 900 - t * 0.12)) { lastBeat = t; sfx.heart(0.8); }
-    if (!goAt && t >= wait) {
-      goAt = t0 + wait;
+    // ¿empieza una ronda nueva?
+    const nk = plan.findIndex((r) => t >= r.start && t < r.end);
+    if (nk !== -1 && nk !== k) {
+      k = nk;
+      goAt = 0;
+      resolved = false;
+      meEl.textContent = '';
+      top.textContent = `Ronda ${k + 1} de ${ROUNDS}: espera la campana…`;
+      sfx.wind(0.8);
+      sfx.warn();
+      if (scene) scene.newRound(k, plan[k].go);
+    }
+    if (k < 0) return;
+    const R = plan[k];
+    if (!goAt && t >= R.start + R_INTRO * 0.6 && t - lastBeat > Math.max(380, 900 - (t - R.start) * 0.12) && t < R.go) { lastBeat = t; sfx.heart(0.8); }
+    if (!goAt && t >= R.go) {
+      goAt = t0 + R.go;
       sfx.bell();
       flash.hidden = false;
       top.textContent = '¡Toca para disparar!';
       setTimeout(() => { flash.hidden = true; }, 700);
     }
-    // ¿ya podemos decidir? (pasó la ventana o ya dispararon todos)
     if (goAt && !resolved) {
-      const res = collect();
+      const res = collect(k);
       const all = ctx.players.every((p) => res[p.id]);
-      if (t >= wait + WINDOW || (all && t >= wait + 250)) {
+      if (t >= R.resolve || (all && t >= R.go + 250)) {
         resolved = true;
-        if (!myRes) { myRes = { ms: 99999 }; } // no disparé: cuenta como el más lento
-        showdown(res);
+        showdown(k, res);
       }
     }
   }, 30);
 
-  function collect() {
+  function collect(kk) {
     const res = {};
     const live = ctx.results ? ctx.results() : {};
     for (const p of ctx.players) {
-      if (p.b) res[p.id] = botResult(ctx.seed, p.id);
-      else if (p.id === ctx.me) { if (myRes) res[p.id] = myRes; }
-      else if (live[p.id]) res[p.id] = live[p.id];
+      if (p.b) res[p.id] = botResult(ctx.seed, p.id, kk);
+      else if (p.id === ctx.me) { if (myRes[kk]) res[p.id] = myRes[kk]; }
+      else if (live[p.id] && Array.isArray(live[p.id].r) && live[p.id].r[kk]) res[p.id] = live[p.id].r[kk];
     }
     return res;
   }
 
-  function showdown(res) {
+  function showdown(kk, res) {
     let win = null;
     for (const p of ctx.players) {
       const v = res[p.id];
@@ -139,25 +195,34 @@ function mount3D(el, ctx) {
     }
     const wp = ctx.players.find((p) => p.id === win);
     if (wp) {
-      top.innerHTML = rich(`${wp.id === ctx.me ? '{trophy} ¡Eres el más rápido!' : `¡${escapeHTML(wp.n)} es el más rápido!`} (${res[win].ms} ms)`);
-      if (wp.id === ctx.me) setTimeout(() => sfx.win(), 1600);
+      wins[wp.id]++;
+      paintScore();
+      top.innerHTML = rich(`${wp.id === ctx.me ? '{trophy} ¡Ganaste el duelo!' : `¡${escapeHTML(wp.n)} es el más rápido!`} (${res[win].ms} ms)`);
+      if (wp.id === ctx.me) setTimeout(() => sfx.win(), 1500);
     } else {
       top.textContent = 'Nadie disparó a tiempo…';
+    }
+    if (kk === ROUNDS - 1) {
+      setTimeout(() => {
+        if (dead) return;
+        const best = Math.max(...Object.values(wins));
+        const champs = ctx.players.filter((p) => wins[p.id] === best && best > 0);
+        top.innerHTML = rich(champs.length ? `{trophy} ${champs.map((p) => escapeHTML(p.n)).join(' y ')}: ${best} de ${ROUNDS} duelos` : 'Fin del duelo');
+      }, 2200);
     }
     if (scene) scene.showdown(win, res);
   }
 
-  cleanup = () => { clearInterval(iv); };
   return () => {
     dead = true;
-    cleanup();
+    clearInterval(iv);
     if (scene) scene.dispose();
   };
 }
 
 const escapeHTML = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-function buildDuel(m, stage, ctx, wait) {
+function buildDuel(m, stage, ctx, t0) {
   const { THREE, makeCharacter, Particles } = m;
   const renderer = new THREE.WebGLRenderer({ antialias: true });
   renderer.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
@@ -339,8 +404,10 @@ function buildDuel(m, stage, ctx, wait) {
   ro.observe(stage);
 
   // ---- acciones
-  const t0 = performance.now();
   let shake = 0;
+  let round = 0;
+  let goT = 99;          // segundos (desde t0) del ¡FUEGO! de la ronda actual
+  let roundT = 0;        // segundos (desde t0) en que empezó la ronda
   const draw = (c) => { if (c.state === 'ready') { c.state = 'draw'; c.t = 0; } };
   const fire = (c, target) => {
     c.state = 'shoot'; c.t = 0;
@@ -391,15 +458,16 @@ function buildDuel(m, stage, ctx, wait) {
     }
     const losers = cowboys.filter((c) => c !== w);
     draw(w);
+    const rid = round;
     losers.forEach((c, i) => {
       setTimeout(() => {
-        if (disposed) return;
+        if (disposed || rid !== round) return;
         fire(w, c);
-        setTimeout(() => { if (!disposed) { knock(c, w); sfx.ricochet(0.4); } }, 70);
+        setTimeout(() => { if (!disposed && rid === round) { knock(c, w); sfx.ricochet(0.4); } }, 70);
       }, 350 + i * 420);
     });
     // al final, el ganador sopla el humo del cañón y gira el revólver
-    setTimeout(() => { if (!disposed) { w.state = 'spin'; w.t = 0; } }, 450 + losers.length * 420 + 400);
+    setTimeout(() => { if (!disposed && rid === round) { w.state = 'spin'; w.t = 0; } }, 450 + losers.length * 420 + 400);
   };
 
   let tumbleOn = true;
@@ -411,14 +479,13 @@ function buildDuel(m, stage, ctx, wait) {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
     const t = (now - t0) / 1000;
-    const goT = wait / 1000;
 
     // ¿alguien más ya disparó? (llega por la red)
     if (t > goT) {
       const live = ctx.results ? ctx.results() : {};
       for (const c of cowboys) {
         if (shown.has(c.p.id) || c.p.id === ctx.me) continue;
-        const v = c.p.b ? botResult(ctx.seed, c.p.id) : live[c.p.id];
+        const v = c.p.b ? botResult(ctx.seed, c.p.id, round) : live[c.p.id] && Array.isArray(live[c.p.id].r) ? live[c.p.id].r[round] : null;
         if (!v) continue;
         if (valid(v) && t > goT + v.ms / 1000) { shown.add(c.p.id); draw(c); fire(c, null); }
         else if (v.f) { shown.add(c.p.id); c.state = 'drop'; c.t = 0; }
@@ -426,7 +493,7 @@ function buildDuel(m, stage, ctx, wait) {
     }
 
     // cámara: acercamiento lento durante la espera, sacudida en los disparos
-    const zoom = t < goT ? Math.min(1, t / goT) : 1;
+    const zoom = t < goT ? Math.min(1, Math.max(0, (t - roundT) / Math.max(0.5, goT - roundT))) : 1;
     const dist = camDist * (1.12 - zoom * 0.12);
     const elev = 0.62 - zoom * 0.08;
     camera.position.set(Math.sin(t * 0.15) * 0.12, Math.sin(elev) * dist, Math.cos(elev) * dist);
@@ -501,9 +568,30 @@ function buildDuel(m, stage, ctx, wait) {
   };
   raf = requestAnimationFrame(frame);
 
+  // nueva ronda: todos de pie, sombreros y revólveres en su lugar
+  const newRound = (k, goMs) => {
+    round = k;
+    roundT = (performance.now() - t0) / 1000;
+    goT = goMs / 1000;
+    shown.clear();
+    tumbleOn = true;
+    for (const c of cowboys) {
+      c.state = 'ready'; c.t = 0; c.aimAt = null; c.hatV = null; c.gunV = 0;
+      c.ch.rig.rotation.set(0, Math.atan2(-c.x, -c.z), 0);
+      if (c.hat.parent !== c.ch.rig) { c.ch.rig.add(c.hat); }
+      c.hat.position.set(0, c.ch.headY + U * 0.62, 0);
+      c.hat.rotation.set(0, 0, 0);
+      if (c.gun.parent !== c.ch.arms[0]) { c.ch.arms[0].add(c.gun); }
+      c.gun.position.set(0, -0.68 * U, 0);
+      c.gun.rotation.set(0, 0, 0);
+      c.muzzle.material.opacity = 0;
+    }
+  };
+
   return {
     onTap,
     showdown,
+    newRound,
     dispose() {
       disposed = true;
       cancelAnimationFrame(raf);
@@ -516,42 +604,51 @@ function buildDuel(m, stage, ctx, wait) {
 
 // ---------------------------------------------------------------- 2D (respaldo)
 function mount2D(el, ctx) {
-  const wait = waitFor(ctx.seed);
+  const plan = schedule(ctx.seed);
+  const myRes = [null, null, null];
+  const t0 = performance.now();
+  let k = -1;
   let goAt = 0;
-  let done = false;
-  el.innerHTML = `<button class="g-reflex wait"><span class="g-reflex-txt">Espera…</span><small>no toques todavía</small></button>`;
+  el.innerHTML = `<button class="g-reflex wait"><span class="g-reflex-txt">Ronda 1</span><small>espera…</small></button>`;
   const pad = el.querySelector('.g-reflex');
   const txt = el.querySelector('.g-reflex-txt');
   const sub = el.querySelector('small');
-  const to = setTimeout(() => {
-    if (done) return;
-    goAt = performance.now();
-    pad.className = 'g-reflex go';
-    txt.textContent = '¡FUEGO!';
-    sub.textContent = '¡toca!';
-    sfx.bell();
-  }, wait);
+  const iv = setInterval(() => {
+    const t = performance.now() - t0;
+    const nk = plan.findIndex((r) => t >= r.start && t < r.end);
+    if (nk !== -1 && nk !== k) {
+      k = nk; goAt = 0;
+      pad.className = 'g-reflex wait';
+      txt.textContent = `Ronda ${k + 1} de ${ROUNDS}`;
+      sub.textContent = 'no toques todavía';
+    }
+    if (k >= 0 && !goAt && t >= plan[k].go) {
+      goAt = t0 + plan[k].go;
+      if (!myRes[k]) { pad.className = 'g-reflex go'; txt.textContent = '¡FUEGO!'; sub.textContent = '¡toca!'; }
+      sfx.bell();
+    }
+  }, 30);
   pad.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    if (done) return;
-    done = true;
-    clearTimeout(to);
+    if (k < 0 || myRes[k]) return;
+    const now = performance.now();
     if (!goAt) {
+      myRes[k] = { f: 1 };
       pad.className = 'g-reflex fail';
       txt.textContent = '¡Muy pronto!';
       sub.textContent = 'falta';
-      ctx.submit({ f: 1 });
       sfx.click();
       buzz(200);
     } else {
-      const ms = Math.round(performance.now() - goAt);
+      const ms = Math.round(now - goAt);
+      myRes[k] = { ms };
       pad.className = 'g-reflex done';
       txt.textContent = `${ms} ms`;
       sub.textContent = ms < 300 ? '¡rapidísimo!' : ms < 450 ? '¡bien!' : 'uff…';
-      ctx.submit({ ms });
       sfx.gun(0.7);
       buzz(30);
     }
+    ctx.submit({ r: myRes });
   });
-  return () => clearTimeout(to);
+  return () => clearInterval(iv);
 }

@@ -128,15 +128,23 @@ export class Host {
     const byPeer = Object.fromEntries(this.nr.peers().map((p) => [pid(p), p]));
     const playKey = st.k;
     const r = mulberry32(st.seed ^ 0x5bd1e995);
-    const res = st.pl.map((p) => {
+    const vals = {};
+    for (const p of st.pl) {
       let v = null;
       if (p.b) v = game.bot(r, st.seed, p);
       else {
         const inp = byPeer[p.id]?.presence?.in;
         if (inp && inp.k === playKey) v = inp.v;
       }
+      vals[p.id] = v;
+    }
+    // juegos de varias rondas comparan a todos juntos (evaluateAll)
+    let all = null;
+    if (game.evaluateAll) { try { all = game.evaluateAll(vals, st.seed, st.pl); } catch { all = null; } }
+    const res = st.pl.map((p) => {
+      const v = vals[p.id];
       let ev = null;
-      try { ev = game.evaluate(v, st.seed); } catch { ev = null; }
+      try { ev = all ? all[p.id] : game.evaluate(v, st.seed); } catch { ev = null; }
       return { id: p.id, score: ev && typeof ev.score === 'number' && isFinite(ev.score) ? ev.score : null, label: ev ? ev.label : 'Sin jugar' };
     });
     const scored = res.filter((x) => x.score !== null);

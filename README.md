@@ -8,11 +8,11 @@ compiten ronda tras ronda por estrellas ⭐.
 
 | | Juego | Cómo se gana |
 |---|---|---|
-| 👊 | Machaca el botón | Más toques en 8 s |
-| 🤠 | Reflejos de vaquero *(3D)* | Duelo del oeste: el más rápido en disparar tras la campana tumba a todos |
-| 🔢 | Cuenta rápida | Contar el emoji objetivo y responder bien y rápido |
-| 🧠 | Simón dice | Repetir la secuencia de 6 colores |
-| ⏱️ | Para en 5.00 | Detener el cronómetro oculto lo más cerca de 5.00 s |
+| 👊 | Machaca el botón *(3D)* | Carrera de torres: cada toque hace crecer tu torre |
+| 🤠 | Reflejos de vaquero *(3D)* | Duelo del oeste a 3 rondas: el más rápido en disparar tras la campana tumba a todos |
+| 🔢 | Cuenta rápida *(3D)* | Llueven objetos 3D sobre un carrusel: cuenta los pedidos y responde rápido |
+| 🧠 | Simón dice *(3D)* | 3 rondas cada vez más difíciles (4→6 botones, 5→9 pasos, la última gira) |
+| ⏱️ | Para en… *(3D)* | 3 rondas: detén el cronómetro gigante en el segundo pedido (1–10) |
 | 🐙 | Kraken en cubierta *(tiempo real)* | Saltar los tentáculos que giran en el barco; sobrevivir más |
 | 💣 | Lluvia de bombas *(tiempo real)* | Esquivar bombas, cajas que caen y barriles que ruedan (se saltan); 3 vidas |
 | 🟩 | Pisa el color *(tiempo real)* | Pararse en el color anunciado antes de que el piso se caiga |

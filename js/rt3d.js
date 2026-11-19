@@ -547,3 +547,106 @@ export function makeWater(opts = {}) {
   mesh.update = (t) => { mat.uniforms.uTime.value = t; };
   return mesh;
 }
+
+// ---------------------------------------------------------------- escenario simple
+// Para mini juegos 3D que no son de movimiento (Simón, Cuenta, Para en…):
+// renderer, cielo, luces, sombras, partículas, cámara, bucle y toques (raycast).
+export function miniStage(stageEl, opts = {}) {
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setPixelRatio(Math.min(1.75, window.devicePixelRatio || 1));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.domElement.className = 'k-3d';
+  stageEl.appendChild(renderer.domElement);
+  const scene = new THREE.Scene();
+  if (opts.skyTop) {
+    const c = document.createElement('canvas');
+    c.width = 4; c.height = 256;
+    const g = c.getContext('2d');
+    const gr = g.createLinearGradient(0, 0, 0, 256);
+    gr.addColorStop(0, opts.skyTop); gr.addColorStop(1, opts.skyBottom || opts.skyTop);
+    g.fillStyle = gr; g.fillRect(0, 0, 4, 256);
+    const tex = new THREE.CanvasTexture(c);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    scene.background = tex;
+  } else scene.background = new THREE.Color(opts.sky || '#1b1035');
+  scene.add(new THREE.HemisphereLight(opts.hemiSky || '#ffffff', opts.hemiGround || '#444466', opts.hemi ?? 1.1));
+  const sun = new THREE.DirectionalLight('#ffffff', opts.sun ?? 2);
+  sun.position.set(1.2, 3, 2);
+  sun.castShadow = true;
+  sun.shadow.mapSize.set(1024, 1024);
+  Object.assign(sun.shadow.camera, { left: -2, right: 2, top: 2, bottom: -2, near: 0.5, far: 10 });
+  sun.shadow.bias = -0.002;
+  scene.add(sun);
+  const camera = new THREE.PerspectiveCamera(opts.fov || 42, 1, 0.05, 50);
+  const particles = new Particles(scene, 600);
+  const S = { THREE, scene, camera, renderer, particles, sun, aspect: 1, shake: 0 };
+  const fit = () => {
+    const w = Math.max(50, stageEl.clientWidth), h = Math.max(50, stageEl.clientHeight);
+    renderer.setSize(w, h, false);
+    renderer.domElement.style.width = w + 'px';
+    renderer.domElement.style.height = h + 'px';
+    S.aspect = camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+    particles.mat.uniforms.uScale.value = renderer.domElement.height / (2 * Math.tan((camera.fov * Math.PI) / 360));
+    if (opts.onResize) opts.onResize(S);
+  };
+  fit();
+  const ro = new ResizeObserver(fit);
+  ro.observe(stageEl);
+  // toque → objetos 3D tocados
+  const ray = new THREE.Raycaster();
+  const v2 = new THREE.Vector2();
+  S.pick = (clientX, clientY, objects) => {
+    const r = renderer.domElement.getBoundingClientRect();
+    v2.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    ray.setFromCamera(v2, camera);
+    const hit = ray.intersectObjects(objects, true)[0];
+    return hit ? hit.object : null;
+  };
+  let raf = 0, last = performance.now(), dead = false;
+  S.start = (update) => {
+    const frame = (now) => {
+      if (dead) return;
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      update(dt, now);
+      if (S.shake > 0.0005) { camera.position.x += (Math.random() - 0.5) * S.shake; camera.position.y += (Math.random() - 0.5) * S.shake; S.shake *= Math.pow(0.02, dt); }
+      particles.update(dt);
+      renderer.render(scene, camera);
+      raf = requestAnimationFrame(frame);
+    };
+    raf = requestAnimationFrame(frame);
+  };
+  S.dispose = () => {
+    dead = true;
+    cancelAnimationFrame(raf);
+    ro.disconnect();
+    renderer.dispose();
+    renderer.domElement.remove();
+  };
+  return S;
+}
+
+// figura dibujada en un canvas (para texturas de botones/baldosas)
+export function symbolTexture(color, sym, fg = '#ffffff') {
+  const c = document.createElement('canvas');
+  c.width = c.height = 256;
+  const g = c.getContext('2d');
+  g.fillStyle = color; g.fillRect(0, 0, 256, 256);
+  const cx = 128, cy = 132, r = 74;
+  g.beginPath();
+  if (sym === 'circle') g.arc(cx, cy, r * 0.8, 0, Math.PI * 2);
+  else if (sym === 'square') g.rect(cx - r * 0.7, cy - r * 0.7, r * 1.4, r * 1.4);
+  else if (sym === 'tri') { g.moveTo(cx, cy - r * 0.9); g.lineTo(cx + r * 0.95, cy + r * 0.7); g.lineTo(cx - r * 0.95, cy + r * 0.7); g.closePath(); }
+  else if (sym === 'diamond') { g.moveTo(cx, cy - r); g.lineTo(cx + r * 0.75, cy); g.lineTo(cx, cy + r); g.lineTo(cx - r * 0.75, cy); g.closePath(); }
+  else if (sym === 'heart') { g.moveTo(cx, cy + r * 0.8); g.bezierCurveTo(cx - r * 1.3, cy - r * 0.1, cx - r * 0.6, cy - r * 1.1, cx, cy - r * 0.35); g.bezierCurveTo(cx + r * 0.6, cy - r * 1.1, cx + r * 1.3, cy - r * 0.1, cx, cy + r * 0.8); }
+  else { for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? r * 0.42 : r; g.lineTo(cx + Math.cos(a) * rr, cy + Math.sin(a) * rr); } g.closePath(); }
+  g.fillStyle = fg; g.fill();
+  g.lineWidth = 8; g.strokeStyle = 'rgba(27,16,53,0.8)'; g.stroke();
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}

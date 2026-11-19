@@ -227,7 +227,9 @@ Host.prototype.syncTurn = function (lg) {
   const now = Date.now();
   this.turnSeen = lg.tn;
   this.turnAt = now;
-  this.botAt = now + 900 + Math.random() * 900;
+  const L = LONG_BY_ID[this.st.lgId];
+  const [b0, b1] = (L && L.rules.BOT_MS) || [900, 1800];
+  this.botAt = now + b0 + Math.random() * (b1 - b0);
 };
 
 Host.prototype.longTick = function () {

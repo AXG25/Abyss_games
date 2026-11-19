@@ -35,6 +35,7 @@ el anfitrión crea la sala, los amigos se unen y él toca el juego para empezar.
 |---|---|---|
 | 🃏 | Ocho loco *(2–4)* | Baraja francesa. Tira del mismo palo o número; el 8 es comodín y cambia el palo; el 2 hace robar 2 (se acumula); la J salta; la Q cambia el sentido. Gana quien se quede sin cartas |
 | ♟️ | Ajedrez *(solo 2)* | Reglas completas: enroque, captura al paso, coronación, jaque mate y tablas (ahogado, triple repetición, 50 movimientos, material insuficiente, por acuerdo). Reloj 10 min + 3 s por jugada; pierde quien se queda sin tiempo o se desconecta más de 1 min en su turno. Con 3 o más jugadores en la sala se deshabilita |
+| 🎲 | Parqués *(2–4)* | El clásico colombiano: se sale de la cárcel con pares (salen todas las fichas; 3 intentos si todas están presas), cada dado mueve una ficha, comer manda a la cárcel (no en seguros ni salidas, salvo al salir de la cárcel), pares = otro lanzamiento, tres pares seguidos coronan la ficha que elijas, número exacto para el cielo. Gana quien corone sus 4 fichas |
 
 - Por turnos: el anfitrión aplica las reglas (`js/long/ocho.js`) y publica el
   estado en `st.lg`; los demás envían sus jugadas en `presence.la`. Cada jugada

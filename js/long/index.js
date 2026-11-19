@@ -7,6 +7,8 @@ import * as ocho from './ocho.js';
 import { mountOcho } from './ocho-ui.js';
 import * as chess from './chess.js';
 import { mountChess } from './chess-ui.js';
+import * as parques from './parques.js';
+import { mountParques } from './parques-ui.js';
 
 export const LONG_GAMES = [
   {
@@ -24,6 +26,14 @@ export const LONG_GAMES = [
     min: 2, max: 2, mins: '10–30 min',
     rules: chess,
     mount: mountChess,
+  },
+  {
+    id: 'parques',
+    name: 'Parqués',
+    desc: 'El clásico colombiano: saca tus fichas de la cárcel con pares, cómete a los rivales, cuídate en los seguros y corona tus 4 fichas en el cielo.',
+    min: 2, max: 4, mins: '20–45 min',
+    rules: parques,
+    mount: mountParques,
   },
 ];
 export const LONG_BY_ID = Object.fromEntries(LONG_GAMES.map((g) => [g.id, g]));

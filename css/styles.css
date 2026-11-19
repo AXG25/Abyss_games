@@ -779,3 +779,41 @@ input:focus { border-color: var(--yellow); }
 .cz-why { margin: 0; color: var(--muted); font-size: 14px; }
 .cz-rkp .cz-p { width: 24px; height: 24px; }
 .oc-end-av .cz-p { width: 100%; height: 100%; }
+
+/* ---- Parqués */
+.parques { gap: 8px; padding-bottom: calc(10px + env(safe-area-inset-bottom)); }
+.pq-players { display: grid; grid-template-columns: repeat(auto-fit, minmax(76px, 1fr)); gap: 6px; }
+.pq-pl { max-width: none; padding: 6px 4px 9px; }
+.pq-pl .oc-av { width: 30px; height: 30px; }
+.pq-cnt { font-size: 11px; letter-spacing: 1px; color: var(--c); display: flex; align-items: center; gap: 3px; }
+.pq-dotc { width: 9px; height: 9px; border-radius: 50%; background: var(--c); border: 1.5px solid #fff; }
+.pq-wrap { display: flex; justify-content: center; }
+.pq-board { width: min(100%, 520px); aspect-ratio: 1; display: block; filter: drop-shadow(0 8px 18px rgba(0,0,0,.45)); touch-action: manipulation; }
+.pq-frame { fill: #2a1d52; stroke: #1b1035; stroke-width: .12; }
+.pq-cell { stroke: rgba(27, 16, 53, .35); stroke-width: .05; }
+.pq-jail { stroke: #1b1035; stroke-width: .1; }
+.pq-pc { transition: transform .1s linear; }
+.pq-body { stroke: #1b1035; stroke-width: .09; }
+.pq-ring { fill: none; stroke-width: .11; animation: pqRing 1s ease-in-out infinite; }
+.pq-hit { fill: transparent; cursor: pointer; }
+.pq-dest { fill: rgba(255, 255, 255, .5); stroke-width: .08; stroke-dasharray: .18 .12; animation: pqDest 1.2s linear infinite; }
+.pq-ctrl { display: flex; align-items: center; justify-content: center; gap: 14px; min-height: 64px; flex-wrap: wrap; }
+.pq-dice { display: flex; gap: 10px; }
+.pq-die { width: 54px; height: 54px; padding: 0; background: none; border-radius: 12px; transition: transform .15s, opacity .15s; }
+.pq-die-svg { width: 100%; height: 100%; }
+.pq-die-svg rect { fill: #fff; stroke: #1b1035; stroke-width: 2; }
+.pq-die-svg circle { fill: #1b1035; }
+.pq-die.sel { transform: translateY(-4px); box-shadow: 0 0 0 3px var(--c), 0 0 16px var(--c); }
+.pq-die.used { opacity: .35; transform: scale(.88); }
+.pq-die.roll { animation: pqShake .14s infinite; }
+.pq-nodice { width: 1px; height: 54px; }
+.pq-btns { display: flex; flex-direction: column; gap: 8px; }
+.pq-btns .btn[hidden] { display: none; }
+.pq-mytimer { margin: 0 auto; width: 160px; visibility: hidden; }
+.pq-rules { text-align: left; max-height: 80vh; overflow-y: auto; }
+.pq-rules h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 22px; text-align: center; }
+.pq-rules ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 8px; font-size: 14px; font-weight: 700; line-height: 1.35; }
+#pq-help { font-family: var(--display); font-size: 18px; }
+@keyframes pqRing { 50% { stroke-opacity: .25; } }
+@keyframes pqDest { to { stroke-dashoffset: -.6; } }
+@keyframes pqShake { 25% { transform: rotate(-12deg) translateY(-3px); } 75% { transform: rotate(12deg) translateY(2px); } }

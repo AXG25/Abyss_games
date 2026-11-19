@@ -34,11 +34,16 @@ el anfitrión crea la sala, los amigos se unen y él toca el juego para empezar.
 | | Juego | Reglas |
 |---|---|---|
 | 🃏 | Ocho loco *(2–4)* | Baraja francesa. Tira del mismo palo o número; el 8 es comodín y cambia el palo; el 2 hace robar 2 (se acumula); la J salta; la Q cambia el sentido. Gana quien se quede sin cartas |
+| ♟️ | Ajedrez *(solo 2)* | Reglas completas: enroque, captura al paso, coronación, jaque mate y tablas (ahogado, triple repetición, 50 movimientos, material insuficiente, por acuerdo). Reloj 10 min + 3 s por jugada; pierde quien se queda sin tiempo o se desconecta más de 1 min en su turno. Con 3 o más jugadores en la sala se deshabilita |
 
 - Por turnos: el anfitrión aplica las reglas (`js/long/ocho.js`) y publica el
   estado en `st.lg`; los demás envían sus jugadas en `presence.la`. Cada jugada
   dice para qué turno era (`tn`), así nunca se aplica dos veces.
-- 30 s por turno: si se acaba, juega solo (6 s si el jugador se desconectó).
+- Ocho loco: 30 s por turno; si se acaba, juega solo (6 s si el jugador se desconectó).
+- Ajedrez: reloj por jugador (`onTime`). Revancha con colores cambiados. Las
+  reglas se comprueban con *perft* (conteo de jugadas en posiciones de prueba).
+- Cada juego dice cuántos jugadores admite (`min`/`max`); fuera de ese rango
+  aparece deshabilitado en la sala con el motivo.
 - Los bots también juegan. Si el anfitrión se va, otro sigue la partida.
 - Para agregar otro juego largo: reglas + pantalla en `js/long/` y regístralo en
   `js/long/index.js`.

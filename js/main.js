@@ -393,7 +393,14 @@ function renderRoomLobby(st) {
       <div class="long-sec">
         <div class="lbl center">Juegos largos</div>
         <p class="hint">Aparte de la fiesta: una partida completa con tus amigos${isHost ? '. Toca uno para empezar.' : '. El anfitrión elige cuál.'}</p>
-        <div class="long-list">${LONG_GAMES.map((g) => `<button class="long-card" data-lg="${g.id}" ${isHost ? '' : 'disabled'}>${gameIcon(g.id)}<span><b>${esc(g.name)}</b><small>${esc(g.desc)}</small><em>${icon('people')} ${g.min}–${g.max} jugadores · ${esc(g.mins)}</em></span></button>`).join('')}</div>
+        <div class="long-list">${LONG_GAMES.map((g) => {
+          const n = st.pl.length;
+          const ok = n >= g.min && n <= g.max;
+          const why = n > g.max
+            ? `Es solo para ${g.max}: ahora hay ${n} en la sala`
+            : `Falta${g.min - n === 1 ? '' : 'n'} ${g.min - n} jugador${g.min - n === 1 ? '' : 'es'}: agrega un bot o espera a un amigo`;
+          return `<button class="long-card ${ok ? '' : 'no'}" data-lg="${g.id}" ${isHost && ok ? '' : 'disabled'}>${gameIcon(g.id)}<span><b>${esc(g.name)}</b><small>${esc(g.desc)}</small><em>${icon('people')} ${g.min === g.max ? `Solo ${g.min} jugadores` : `${g.min}–${g.max} jugadores`} · ${esc(g.mins)}</em>${ok ? '' : `<strong class="long-no">${icon('warn')} ${esc(why)}</strong>`}</span></button>`;
+        }).join('')}</div>
       </div>
     </section>`;
   updateNetPill();
@@ -418,7 +425,7 @@ function renderRoomLobby(st) {
       const b = e.target.closest('[data-lg]');
       if (!b) return;
       const g = LONG_BY_ID[b.dataset.lg];
-      if (!S.host.startLong(g.id)) { toast(`Se necesitan al menos ${g.min} jugadores: agrega un bot o espera a un amigo`, 3200); return; }
+      if (!S.host.startLong(g.id)) { toast(st.pl.length > g.max ? `${g.name} es solo para ${g.max} jugadores` : `Se necesitan al menos ${g.min} jugadores: agrega un bot o espera a un amigo`, 3200); return; }
       fanfare();
     };
   }

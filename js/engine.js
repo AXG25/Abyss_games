@@ -193,11 +193,11 @@ Host.prototype.startLong = function (id, keepScore = false) {
   if (!L) return false;
   this.tick();
   const st = this.st;
-  if (st.pl.length < L.min) return false;
-  const prevWins = keepScore && st.lg && st.lgId === id ? st.lg.wins : {};
+  if (st.pl.length < L.min || st.pl.length > L.max) return false;
+  const prev = keepScore && st.lg && st.lgId === id ? st.lg : null;
   st.lgId = id;
   st.lk = Math.floor(Math.random() * 2 ** 31);
-  st.lg = L.rules.init(st.pl.map((p) => p.id), Math.floor(Math.random() * 2 ** 31), prevWins);
+  st.lg = L.rules.init(st.pl.map((p) => p.id), Math.floor(Math.random() * 2 ** 31), prev ? prev.wins : {}, prev);
   st.rk = [];
   this.go('long');
   this.startLongLoop();
@@ -208,6 +208,7 @@ Host.prototype.startLongLoop = function () {
   clearInterval(this.liv);
   this.lastN = {};
   this.turnSeen = -1;
+  this.offSince = {};
   this.liv = setInterval(() => this.longTick(), 200);
 };
 
@@ -216,7 +217,17 @@ Host.prototype.longAct = function (id, a) {
   const st = this.st;
   const L = LONG_BY_ID[st.lgId];
   if (st.ph !== 'long' || !st.lg || !L || !a || a.tn !== st.lg.tn) return;
-  if (L.rules.act(st.lg, id, a)) this.publish();
+  this.syncTurn(st.lg);
+  if (L.rules.act(st.lg, id, a, { elapsed: Date.now() - this.turnAt })) { this.syncTurn(st.lg); this.publish(); }
+};
+
+// Anota cuándo empezó el turno actual (para el reloj, los bots y el tiempo de turno).
+Host.prototype.syncTurn = function (lg) {
+  if (lg.tn === this.turnSeen) return;
+  const now = Date.now();
+  this.turnSeen = lg.tn;
+  this.turnAt = now;
+  this.botAt = now + 900 + Math.random() * 900;
 };
 
 Host.prototype.longTick = function () {
@@ -225,6 +236,7 @@ Host.prototype.longTick = function () {
   if (st.ph !== 'long' || !st.lg || !L) return;
   const lg = st.lg;
   let changed = false;
+  this.syncTurn(lg);
   // jugadas de los demás (cada una dice para qué turno era: no se aplica dos veces)
   for (const peer of this.nr.peers()) {
     if (peer.isMe) continue;
@@ -233,20 +245,27 @@ Host.prototype.longTick = function () {
     const id = pid(peer);
     if (la.n <= (this.lastN[id] || 0)) continue;
     this.lastN[id] = la.n;
-    if (la.a && la.a.tn === lg.tn && L.rules.act(lg, id, la.a)) changed = true;
+    if (la.a && la.a.tn === lg.tn && L.rules.act(lg, id, la.a, { elapsed: Date.now() - this.turnAt })) { changed = true; this.syncTurn(lg); }
   }
-  if (!lg.win) {
-    const now = Date.now();
-    if (lg.tn !== this.turnSeen) {
-      this.turnSeen = lg.tn;
-      this.turnAt = now;
-      this.botAt = now + 900 + Math.random() * 900;
-    }
+  const now = Date.now();
+  // cuánto lleva desconectado cada jugador
+  for (const p of st.pl) {
+    if (p.off) { if (!this.offSince[p.id]) this.offSince[p.id] = now; } else delete this.offSince[p.id];
+  }
+  if (!(lg.win || lg.end)) {
     const who = L.rules.current(lg);
     const p = st.pl.find((x) => x.id === who);
-    // bots: piensan un momento; humanos: si se les acaba el tiempo, juega solo
-    const late = !p || (p.b ? now >= this.botAt : now - this.turnAt > (p.off ? L.rules.OFF_TURN_MS : L.rules.TURN_MS));
-    if (late && L.rules.act(lg, who, L.rules.autoMove(lg, who))) changed = true;
+    if (p && p.b) {
+      // bots: piensan un momento y juegan
+      if (now >= this.botAt && L.rules.act(lg, who, L.rules.autoMove(lg, who), { elapsed: now - this.turnAt })) { changed = true; this.syncTurn(lg); }
+    } else if (L.rules.onTime) {
+      // juegos con reloj (ajedrez): pierde quien se queda sin tiempo o abandona
+      const offMs = !p ? Infinity : this.offSince[who] ? now - this.offSince[who] : 0;
+      if (L.rules.onTime(lg, now - this.turnAt, offMs)) changed = true;
+    } else if (!p || now - this.turnAt > (p.off ? L.rules.OFF_TURN_MS : L.rules.TURN_MS)) {
+      // humanos: si se les acaba el tiempo del turno, juega solo
+      if (L.rules.act(lg, who, L.rules.autoMove(lg, who), { elapsed: now - this.turnAt })) { changed = true; this.syncTurn(lg); }
+    }
   }
   if (changed) this.publish();
 };

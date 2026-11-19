@@ -5,6 +5,8 @@
 //          current(lg) → pid, TURN_MS, OFF_TURN_MS
 import * as ocho from './ocho.js';
 import { mountOcho } from './ocho-ui.js';
+import * as chess from './chess.js';
+import { mountChess } from './chess-ui.js';
 
 export const LONG_GAMES = [
   {
@@ -14,6 +16,14 @@ export const LONG_GAMES = [
     min: 2, max: 4, mins: '5–15 min',
     rules: ocho,
     mount: mountOcho,
+  },
+  {
+    id: 'chess',
+    name: 'Ajedrez',
+    desc: 'Partida completa con todas las reglas: enroque, captura al paso, coronación y tablas. Reloj de 10 min por jugador (+3 s por jugada).',
+    min: 2, max: 2, mins: '10–30 min',
+    rules: chess,
+    mount: mountChess,
   },
 ];
 export const LONG_BY_ID = Object.fromEntries(LONG_GAMES.map((g) => [g.id, g]));

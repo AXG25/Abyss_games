@@ -865,3 +865,54 @@ input:focus { border-color: var(--yellow); }
 .dm-rv-t { display: flex; gap: 3px; flex-wrap: wrap; }
 .dm-rv em { font-style: normal; font-size: 12px; color: var(--yellow); }
 .dm-score-end { margin-top: 2px; }
+
+/* ---- Caos */
+.ca {
+  position: relative; width: 64px; height: 90px; border-radius: 10px; border: 3px solid #fff;
+  background: radial-gradient(circle at 50% 50%, rgba(255,255,255,.22), transparent 62%), repeating-linear-gradient(135deg, rgba(255,255,255,.08) 0 5px, transparent 5px 10px), var(--e);
+  box-shadow: 0 3px 8px rgba(0,0,0,.4); color: #fff; user-select: none; overflow: hidden;
+}
+.ca.wild { background: radial-gradient(circle, #3c2a6e, #1b1035); }
+.ca-tl, .ca-br { position: absolute; font-family: var(--display); font-size: 15px; line-height: 1; text-shadow: 0 1.5px 0 rgba(0,0,0,.35); }
+.ca-tl { top: 4px; left: 5px; } .ca-br { bottom: 4px; right: 5px; transform: rotate(180deg); }
+.ca-el { position: absolute; top: 4px; right: 4px; width: 13px; height: 13px; }
+.ce-i { fill: #fff; }
+.ce-i .cut { fill: none; stroke: var(--e, #3fbf4f); stroke-width: 1.6; stroke-linecap: round; }
+.ca-mid { position: absolute; inset: 0; display: grid; place-items: center; }
+.ca-mid > * { grid-area: 1 / 1; }
+.ca-num { font-family: var(--display); font-weight: 400; font-size: 40px; color: #fff; -webkit-text-stroke: 2px #1b1035; paint-order: stroke fill; text-shadow: 0 3px 0 rgba(0,0,0,.3); }
+.ca-num.sm { font-size: 30px; }
+.ca-num.over { position: relative; z-index: 1; }
+.ca-act { width: 36px; height: 36px; fill: none; stroke: #fff; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; filter: drop-shadow(0 2px 0 rgba(0,0,0,.35)); }
+.ca-wheel { width: 44px; height: 44px; filter: drop-shadow(0 2px 2px rgba(0,0,0,.4)); }
+.ca.back { background: repeating-radial-gradient(circle at 50% 50%, #3c096c 0 6px, #240046 6px 12px); display: grid; place-items: center; }
+.ca.back span { font-family: var(--display); font-size: 15px; letter-spacing: 1px; color: var(--yellow); transform: rotate(-24deg); text-shadow: 0 2px 0 #1b1035; }
+.oc-deck .ca, .oc-disc .ca { position: absolute; inset: 0; width: 76px; height: 106px; }
+.oc-deck .ca.b2 { transform: translate(-3px, -3px); }
+.oc-deck .ca.b3 { transform: translate(-6px, -6px); }
+.oc-deck.ok .ca.b3 { box-shadow: 0 0 0 3px var(--yellow), 0 0 18px var(--yellow); animation: ocGlow 1.2s infinite; }
+.oc-disc .ca.under { transform: rotate(-9deg) translate(-4px, 2px); filter: brightness(.85); }
+.oc-disc .ca .ca-num { font-size: 48px; }
+.oc-disc .ca .ca-wheel { width: 52px; height: 52px; }
+.ca.in-up { animation: ocInUp .35s ease-out; }
+.ca.in-down { animation: ocInDown .35s ease-out; }
+.oc-hand .ca { flex: none; margin-left: var(--gap, 4px); transition: transform .15s, filter .15s; }
+.oc-hand .ca:first-child { margin-left: 0; }
+.oc-hand .ca.ok { transform: translateY(-12px); box-shadow: 0 0 0 3px var(--yellow), 0 8px 14px rgba(0,0,0,.45); cursor: pointer; z-index: 1; }
+.oc-hand .ca.dim { filter: brightness(.55) saturate(.7); }
+.oc-hand .ca.new { animation: ocNew .4s ease-out; }
+.oc-hand .ca.nope { animation: ocNope .3s; }
+.ca-backs i { background: repeating-radial-gradient(circle, #3c096c 0 3px, #240046 3px 6px); }
+.ca-elem span { width: 22px; height: 22px; }
+.ca-elem span .ce-i { width: 14px; height: 14px; }
+.ca-pick .oc-pick-row button { background: var(--e); color: #fff; }
+.ca-pick .oc-pick-row button .ce-i { width: 34px; height: 34px; }
+.ca-pick .oc-pick-row small { color: #fff; }
+.ca-warn { color: #ff8fa3; }
+.ca-table .oc-stack { font-size: 26px; }
+.ca-lbl { position: absolute; left: 0; right: 0; bottom: 19px; text-align: center; font-size: 7.5px; font-weight: 900; letter-spacing: .4px; text-transform: uppercase; color: #fff; text-shadow: 0 1px 0 rgba(0,0,0,.5); }
+.oc-disc .ca .ca-lbl { font-size: 9px; bottom: 22px; }
+.ca-ci { width: 13px; height: 13px; fill: none; stroke: #fff; stroke-width: 3.4; stroke-linecap: round; stroke-linejoin: round; display: block; }
+.ca-cw { display: block; width: 12px; height: 12px; border-radius: 50%; border: 1.5px solid #fff; background: conic-gradient(#ff6b2c 0 25%, #1e9bff 0 50%, #3fbf4f 0 75%, #9b4dff 0); }
+.ca .ca-mid { padding-bottom: 6px; }
+.ca-deck .oc-deck-lbl { left: 2px; right: 8px; background: rgba(10, 4, 30, .78); border-radius: 10px; padding: 3px 0; font-size: 16px; }

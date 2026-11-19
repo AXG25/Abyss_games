@@ -5,6 +5,8 @@
 //          current(lg) → pid, TURN_MS, OFF_TURN_MS
 import * as ocho from './ocho.js';
 import { mountOcho } from './ocho-ui.js';
+import * as caos from './caos.js';
+import { mountCaos } from './caos-ui.js';
 import * as chess from './chess.js';
 import { mountChess } from './chess-ui.js';
 import * as parques from './parques.js';
@@ -20,6 +22,14 @@ export const LONG_GAMES = [
     min: 2, max: 4, mins: '5–15 min',
     rules: ocho,
     mount: mountOcho,
+  },
+  {
+    id: 'caos',
+    name: 'Caos',
+    desc: 'Cartas de 4 elementos con bloqueo de turno, cambio de dirección, cambio de elemento, +2 y +4. ¡Los +2 y +4 se suman! Quien no pueda responder se come todo lo acumulado.',
+    min: 2, max: 4, mins: '5–15 min',
+    rules: caos,
+    mount: mountCaos,
   },
   {
     id: 'chess',

@@ -1,6 +1,6 @@
 // 🧠 Simón dice — 3 rondas en 3D, cada vez más difícil.
-// Ronda 1: 4 botones, 5 pasos. Ronda 2: 6 botones, 7 pasos, más rápido.
-// Ronda 3: 6 botones, 9 pasos, más rápido y la plataforma GIRA.
+// Ronda 1: 4 botones, 4 pasos. Ronda 2: 6 botones, 6 pasos, más rápido.
+// Ronda 3: 6 botones, 7 pasos, más rápido y la plataforma GIRA (despacio).
 // Mira la secuencia y repítela tocando los botones. Cada uno tiene su color,
 // su figura y su sonido.
 import { mulberry32, buzz } from '../util.js';
@@ -9,10 +9,12 @@ import { ctx as actx, bus } from '../audio.js';
 import { rich } from '../icons.js';
 import { USE_2D } from '../rt.js';
 
+// Dificultad: secuencias ~20 % más cortas, se muestran ~20 % más lento y la
+// plataforma gira ~20 % más despacio que en la versión original.
 const ROUNDS = [
-  { n: 4, len: 5, step: 620, input: 6500, spin: 0 },
-  { n: 6, len: 7, step: 480, input: 8000, spin: 0 },
-  { n: 6, len: 9, step: 400, input: 9500, spin: 0.55 },
+  { n: 4, len: 4, step: 745, input: 6500, spin: 0 },
+  { n: 6, len: 6, step: 575, input: 8000, spin: 0 },
+  { n: 6, len: 7, step: 480, input: 9500, spin: 0.44 },
 ];
 const INTRO = 1600;
 const LEAD = 700;
@@ -84,7 +86,7 @@ export default {
   bot: (r, seed, p) => {
     const rr = mulberry32((seed ^ hash(p?.id || 'bot0')) >>> 0);
     return { r: ROUNDS.map((R, k) => {
-      const perfect = rr() < [0.75, 0.5, 0.3][k];
+      const perfect = rr() < [0.8, 0.6, 0.4][k];
       return { ok: perfect ? R.len : Math.floor(rr() * R.len), t: Math.round(R.len * (450 + rr() * 300)) };
     }) };
   },

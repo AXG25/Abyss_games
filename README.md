@@ -12,15 +12,15 @@ compiten ronda tras ronda por estrellas ⭐.
 | 🏎️ | Gran Premio *(3D, tiempo real)* | Carrera de karts isométrica a 3 vueltas en una pista de 4 carriles: turbo, flechas de impulso, aceite y minimapa |
 | 🏹 | Tiro con arco *(3D)* | 3 rondas de precisión (18, 30 y 45 m): tensa, apunta y suelta compensando el viento antes de que se acabe el tiempo |
 | 👊 | Machaca el botón *(3D)* | Carrera de torres: cada toque hace crecer tu torre |
-| 🤠 | Reflejos de vaquero *(3D)* | Duelo del oeste a 3 rondas: el más rápido en disparar tras la campana tumba a todos |
+| 🤠 | Reflejos de vaquero *(3D)* | Duelo del oeste: el más rápido en disparar tras la campana tumba a todos. El primero en ganar 3 duelos gana |
 | 🔢 | Cuenta rápida *(3D)* | Llueven objetos 3D sobre un carrusel: cuenta los pedidos y responde rápido |
-| 🧠 | Simón dice *(3D)* | 3 rondas cada vez más difíciles (4→6 botones, 5→9 pasos, la última gira) |
+| 🧠 | Simón dice *(3D)* | 3 rondas cada vez más difíciles (4→6 botones, 4→7 pasos, la última gira) |
 | ⏱️ | Para en… *(3D)* | 3 rondas: detén el cronómetro gigante en el segundo pedido (1–10) |
 | 🐙 | Kraken en cubierta *(tiempo real)* | Saltar los tentáculos que giran en el barco; sobrevivir más |
 | 💣 | Lluvia de bombas *(tiempo real)* | Esquivar bombas, cajas que caen y barriles que ruedan (se saltan); 3 vidas |
 | 🟩 | Pisa el color *(tiempo real)* | Pararse en el color anunciado antes de que el piso se caiga |
 | 🪙 | Fiebre de monedas *(tiempo real)* | Recoger más monedas en 30 s |
-| 🌀 | Trompos de batalla *(tiempo real)* | Embestir con tu trompo a los demás para sacarlos del estadio |
+| 🌀 | Trompos de batalla *(tiempo real)* | Por rondas: embiste a los demás para sacarlos del estadio; la ronda la gana el último en pie y el primero en ganar 3 rondas gana |
 | 💥 | Bomba caliente *(tiempo real)* | Pasar la bomba antes de que explote; gana el último en pie |
 | 🧊 | Hielo frágil *(tiempo real)* | El hielo que pisas se hunde; gana el último en pie |
 

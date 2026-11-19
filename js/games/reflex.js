@@ -2,6 +2,7 @@
 // Todos con el revólver en la mano, frente a frente. Cuando suena la campana y
 // aparece ¡FUEGO!, toca la pantalla: el más rápido desenfunda y tumba a los
 // demás. Si disparas antes de tiempo, se te cae el revólver.
+// Se juegan duelos hasta que alguien gana 3: ese es el campeón.
 //
 // Cada teléfono mide su propio tiempo de reacción. Los resultados de los demás
 // llegan por la red; los bots son deterministas (misma semilla → mismo tiempo),
@@ -11,7 +12,8 @@ import { icon, rich } from '../icons.js';
 import { sfx, say } from '../audio.js';
 import { USE_2D } from '../rt.js';
 
-const ROUNDS = 3;
+const WIN = 3;          // duelos ganados para llevarse la partida
+const ROUNDS = 9;       // máximo de duelos (4 jugadores con 2 victorias cada uno = 8, +1)
 const R_INTRO = 1500;  // ms de "Ronda N" antes de cada duelo
 const WINDOW = 1400;   // ms después del ¡FUEGO! para decidir al ganador
 const SHOW = 2800;     // ms de animación del duelo
@@ -35,12 +37,22 @@ function botResult(seed, id, k = 0) {
   return r() < 0.1 ? { f: 1 } : { ms: Math.round(230 + r() * 260) };
 }
 const valid = (v) => v && !v.f && typeof v.ms === 'number' && v.ms >= 80;
+// ganador de un duelo: el disparo válido más rápido (empate → el primero de la lista)
+function duelWinner(players, res) {
+  let win = null;
+  for (const p of players) {
+    const v = res[p.id];
+    if (valid(v) && (!win || v.ms < res[win].ms)) win = p.id;
+  }
+  return win;
+}
+const dots = (n) => '●'.repeat(Math.min(WIN, n)) + '○'.repeat(Math.max(0, WIN - n));
 
 export default {
   id: 'reflex',
   name: 'Reflejos de vaquero',
   uses3d: true,
-  desc: '¡Duelo en el viejo oeste, a 3 rondas! Espera la campana y el ¡FUEGO!, y toca la pantalla lo más rápido posible: el más rápido tumba a todos. Si disparas antes, se te cae el revólver. Gana quien gane más duelos.',
+  desc: '¡Duelo en el viejo oeste! Espera la campana y el ¡FUEGO!, y toca la pantalla lo más rápido posible: el más rápido tumba a todos. Si disparas antes, se te cae el revólver. El primero en ganar 3 duelos gana la partida.',
   dur: (seed) => schedule(seed)[ROUNDS - 1].end,
 
   mount(el, ctx) {
@@ -50,38 +62,42 @@ export default {
     return mount3D(el, ctx);
   },
 
-  // gana quien gane más duelos; si empatan, el que sumó menos tiempo
+  // el primero en ganar 3 duelos gana; los demás, por duelos ganados y luego
+  // por tiempo promedio. Solo cuentan los duelos que se jugaron.
   evaluateAll(vals, seed, pl) {
     const wins = {}, total = {}, any = {};
     for (const p of pl) { wins[p.id] = 0; total[p.id] = 0; any[p.id] = false; }
+    let played = 0;
     for (let k = 0; k < ROUNDS; k++) {
-      const res = pl.map((p) => {
+      const res = {};
+      for (const p of pl) {
         const v = vals[p.id] && Array.isArray(vals[p.id].r) ? vals[p.id].r[k] : null;
-        if (v) any[p.id] = true;
-        return [p.id, v];
-      });
-      let best = Infinity;
-      for (const [, v] of res) if (valid(v)) best = Math.min(best, v.ms);
-      for (const [id, v] of res) {
-        if (valid(v) && v.ms === best) wins[id]++;
-        total[id] += valid(v) ? v.ms : 1500;
+        if (v) { any[p.id] = true; res[p.id] = v; }
+        total[p.id] += valid(v) ? v.ms : 1500;
       }
+      played++;
+      const w = duelWinner(pl, res);
+      if (w) wins[w]++;
+      if (w && wins[w] >= WIN) break;
     }
     const out = {};
     for (const p of pl) {
+      const avg = Math.round(total[p.id] / Math.max(1, played));
       out[p.id] = any[p.id]
-        ? { score: wins[p.id] * 1e6 - total[p.id], label: `${wins[p.id]} de ${ROUNDS} duelos · ${Math.round(total[p.id] / ROUNDS)} ms prom.` }
+        ? { score: wins[p.id] * 1e6 - avg, label: `${wins[p.id]} duelo${wins[p.id] === 1 ? '' : 's'} · ${avg} ms` }
         : null;
     }
     return out;
   },
   evaluate(v) {
     if (!v || !Array.isArray(v.r)) return null;
-    const t = v.r.reduce((a, x) => a + (valid(x) ? x.ms : 1500), 0);
-    return { score: -t, label: `${Math.round(t / ROUNDS)} ms prom.` };
+    const r = v.r.filter(Boolean);
+    if (!r.length) return null;
+    const t = r.reduce((a, x) => a + (valid(x) ? x.ms : 1500), 0);
+    return { score: -t / r.length, label: `${Math.round(t / r.length)} ms prom.` };
   },
 
-  bot: (r, seed, p) => ({ r: [0, 1, 2].map((k) => botResult(seed, p?.id || 'bot0', k)) }),
+  bot: (r, seed, p) => ({ r: Array.from({ length: ROUNDS }, (_, k) => botResult(seed, p?.id || 'bot0', k)) }),
 };
 
 // ---------------------------------------------------------------- 3D
@@ -90,7 +106,7 @@ function mount3D(el, ctx) {
   el.innerHTML = `
     <div class="duel">
       <div class="duel-stage"></div>
-      <div class="duel-top">Ronda 1 de ${ROUNDS}</div>
+      <div class="duel-top">Ronda 1 · gana quien llegue a ${WIN}</div>
       <div class="duel-flash" hidden>¡FUEGO!</div>
       <div class="duel-score"></div>
       <div class="duel-me"></div>
@@ -107,18 +123,19 @@ function mount3D(el, ctx) {
   let k = -1;            // ronda actual
   let goAt = 0;          // momento del ¡FUEGO! de esta ronda
   let resolved = false;
-  const myRes = [null, null, null];
+  const myRes = Array(ROUNDS).fill(null);
   const wins = Object.fromEntries(ctx.players.map((p) => [p.id, 0]));
+  let over = false;      // alguien ya ganó 3 duelos: no hay más rondas
   let scene = null;
 
   const paintScore = () => {
-    scoreEl.innerHTML = ctx.players.map((p) => `<span style="--c:${p.c}">${escapeHTML(p.n)} <b>${'●'.repeat(wins[p.id])}${'○'.repeat(Math.max(0, ROUNDS - wins[p.id]))}</b></span>`).join('');
+    scoreEl.innerHTML = ctx.players.map((p) => `<span style="--c:${p.c}">${escapeHTML(p.n)} <b>${dots(wins[p.id])}</b></span>`).join('');
   };
   paintScore();
 
   const tap = (e) => {
     e.preventDefault();
-    if (k < 0 || myRes[k] || resolved) return;
+    if (over || k < 0 || myRes[k] || resolved) return;
     const now = performance.now();
     if (now < t0 + plan[k].start + R_INTRO * 0.6) return; // aún no empieza la ronda
     if (!goAt || now < goAt) {
@@ -146,12 +163,13 @@ function mount3D(el, ctx) {
     const t = performance.now() - t0;
     // ¿empieza una ronda nueva?
     const nk = plan.findIndex((r) => t >= r.start && t < r.end);
+    if (over) return;
     if (nk !== -1 && nk !== k) {
       k = nk;
       goAt = 0;
       resolved = false;
       meEl.textContent = '';
-      top.textContent = `Ronda ${k + 1} de ${ROUNDS}: espera la campana…`;
+      top.textContent = `Ronda ${k + 1}: espera la campana…`;
       sfx.wind(0.8);
       sfx.warn();
       if (scene) scene.newRound(k, plan[k].go);
@@ -176,23 +194,10 @@ function mount3D(el, ctx) {
     }
   }, 30);
 
-  function collect(kk) {
-    const res = {};
-    const live = ctx.results ? ctx.results() : {};
-    for (const p of ctx.players) {
-      if (p.b) res[p.id] = botResult(ctx.seed, p.id, kk);
-      else if (p.id === ctx.me) { if (myRes[kk]) res[p.id] = myRes[kk]; }
-      else if (live[p.id] && Array.isArray(live[p.id].r) && live[p.id].r[kk]) res[p.id] = live[p.id].r[kk];
-    }
-    return res;
-  }
+  const collect = (kk) => collectDuel(ctx, myRes, kk);
 
   function showdown(kk, res) {
-    let win = null;
-    for (const p of ctx.players) {
-      const v = res[p.id];
-      if (valid(v) && (!win || v.ms < res[win].ms)) win = p.id;
-    }
+    const win = duelWinner(ctx.players, res);
     const wp = ctx.players.find((p) => p.id === win);
     if (wp) {
       wins[wp.id]++;
@@ -202,13 +207,16 @@ function mount3D(el, ctx) {
     } else {
       top.textContent = 'Nadie disparó a tiempo…';
     }
-    if (kk === ROUNDS - 1) {
+    const champ = ctx.players.find((p) => wins[p.id] >= WIN);
+    if (champ || kk === ROUNDS - 1) {
+      over = true;
       setTimeout(() => {
         if (dead) return;
-        const best = Math.max(...Object.values(wins));
-        const champs = ctx.players.filter((p) => wins[p.id] === best && best > 0);
-        top.innerHTML = rich(champs.length ? `{trophy} ${champs.map((p) => escapeHTML(p.n)).join(' y ')}: ${best} de ${ROUNDS} duelos` : 'Fin del duelo');
+        top.innerHTML = rich(finalText(ctx, wins, champ));
+        if (champ && champ.id === ctx.me) sfx.win();
       }, 2200);
+      // el anfitrión cierra la ronda en cuanto termina la animación
+      if (ctx.endEarly) setTimeout(() => { if (!dead) ctx.endEarly(); }, 3600);
     }
     if (scene) scene.showdown(win, res);
   }
@@ -218,6 +226,25 @@ function mount3D(el, ctx) {
     clearInterval(iv);
     if (scene) scene.dispose();
   };
+}
+
+function finalText(ctx, wins, champ) {
+  if (champ) return champ.id === ctx.me ? `{trophy} ¡Ganaste la partida con ${WIN} duelos!` : `{trophy} ¡${escapeHTML(champ.n)} gana la partida!`;
+  const best = Math.max(0, ...Object.values(wins));
+  const champs = ctx.players.filter((p) => wins[p.id] === best && best > 0);
+  return champs.length ? `{trophy} ${champs.map((p) => escapeHTML(p.n)).join(' y ')}: ${best} duelos` : 'Fin del duelo';
+}
+
+// resultados de un duelo: bots (deterministas), el mío y los que llegaron por la red
+function collectDuel(ctx, myRes, kk) {
+  const res = {};
+  const live = ctx.results ? ctx.results() : {};
+  for (const p of ctx.players || []) {
+    if (p.b) res[p.id] = botResult(ctx.seed, p.id, kk);
+    else if (p.id === ctx.me) { if (myRes[kk]) res[p.id] = myRes[kk]; }
+    else if (live[p.id] && Array.isArray(live[p.id].r) && live[p.id].r[kk]) res[p.id] = live[p.id].r[kk];
+  }
+  return res;
 }
 
 const escapeHTML = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -605,32 +632,57 @@ function buildDuel(m, stage, ctx, t0) {
 // ---------------------------------------------------------------- 2D (respaldo)
 function mount2D(el, ctx) {
   const plan = schedule(ctx.seed);
-  const myRes = [null, null, null];
+  const players = ctx.players || [];
+  const myRes = Array(ROUNDS).fill(null);
+  const wins = Object.fromEntries(players.map((p) => [p.id, 0]));
   const t0 = performance.now();
   let k = -1;
   let goAt = 0;
+  let resolved = false;
+  let over = false;
+  let dead = false;
   el.innerHTML = `<button class="g-reflex wait"><span class="g-reflex-txt">Ronda 1</span><small>espera…</small></button>`;
   const pad = el.querySelector('.g-reflex');
   const txt = el.querySelector('.g-reflex-txt');
   const sub = el.querySelector('small');
+  const score = () => players.map((p) => `${escapeHTML(p.n)} ${dots(wins[p.id])}`).join(' · ');
   const iv = setInterval(() => {
+    if (over) return;
     const t = performance.now() - t0;
     const nk = plan.findIndex((r) => t >= r.start && t < r.end);
     if (nk !== -1 && nk !== k) {
-      k = nk; goAt = 0;
+      k = nk; goAt = 0; resolved = false;
       pad.className = 'g-reflex wait';
-      txt.textContent = `Ronda ${k + 1} de ${ROUNDS}`;
+      txt.textContent = `Ronda ${k + 1}`;
       sub.textContent = 'no toques todavía';
     }
-    if (k >= 0 && !goAt && t >= plan[k].go) {
+    if (k < 0) return;
+    if (!goAt && t >= plan[k].go) {
       goAt = t0 + plan[k].go;
       if (!myRes[k]) { pad.className = 'g-reflex go'; txt.textContent = '¡FUEGO!'; sub.textContent = '¡toca!'; }
       sfx.bell();
     }
+    if (goAt && !resolved) {
+      const res = collectDuel(ctx, myRes, k);
+      if (t >= plan[k].resolve || (players.every((p) => res[p.id]) && t >= plan[k].go + 250)) {
+        resolved = true;
+        const w = duelWinner(players, res);
+        if (w) wins[w]++;
+        const wp = players.find((p) => p.id === w);
+        if (!myRes[k]) { pad.className = 'g-reflex wait'; txt.textContent = 'No disparaste'; }
+        sub.innerHTML = `${wp ? (w === ctx.me ? '¡Ganaste el duelo!' : `Gana ${escapeHTML(wp.n)}`) : 'Nadie disparó a tiempo'}<br>${score()}`;
+        const champ = players.find((p) => wins[p.id] >= WIN);
+        if (champ || k === ROUNDS - 1) {
+          over = true;
+          setTimeout(() => { if (!dead) { txt.innerHTML = rich(finalText(ctx, wins, champ)); if (champ && champ.id === ctx.me) sfx.win(); } }, 1500);
+          if (ctx.endEarly) setTimeout(() => { if (!dead) ctx.endEarly(); }, 3600);
+        }
+      }
+    }
   }, 30);
   pad.addEventListener('pointerdown', (e) => {
     e.preventDefault();
-    if (k < 0 || myRes[k]) return;
+    if (over || k < 0 || myRes[k] || resolved) return;
     const now = performance.now();
     if (!goAt) {
       myRes[k] = { f: 1 };
@@ -650,5 +702,5 @@ function mount2D(el, ctx) {
     }
     ctx.submit({ r: myRes });
   });
-  return () => clearInterval(iv);
+  return () => { dead = true; clearInterval(iv); };
 }

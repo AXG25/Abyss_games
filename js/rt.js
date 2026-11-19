@@ -15,7 +15,8 @@
 //   brain(seed, idx, W) → (p, t) => inp   IA de bot
 //   result(p) → v                         lo que se envía al anfitrión
 //   draw(g, view, t, W, ents, meId)       dibuja el escenario y las entidades
-//   opcionales: pack(p) → datos extra en red, hud(p), banner(t, W), sounds
+//   opcionales: pack(p) → datos extra en red, hud(p), banner(t, W, ext), sounds,
+//   timeText(t, ext), won(p), snapDist, over(all, t, ext)
 import { beep, buzz } from './util.js';
 import { sfx, say, music, stopMusic, musicTempo } from './audio.js';
 import { avatarImage, rich, icon } from './icons.js';
@@ -383,7 +384,7 @@ export function mountRT(el, ctx, G) {
       if (ctx.isHost && !overSent) {
         const alive = ext.all.filter((e) => !e.out).length;
         // termina si cayeron todos, o si queda uno solo (con 2+ jugadores); o la regla del juego
-        if (G.over ? G.over(ext.all, simT) : (alive === 0 || (players.length > 1 && alive <= 1))) { overSent = true; ext.over = true; setTimeout(() => ctx.endEarly && ctx.endEarly(), 300); }
+        if (G.over ? G.over(ext.all, simT, ext) : (alive === 0 || (players.length > 1 && alive <= 1))) { overSent = true; ext.over = true; setTimeout(() => ctx.endEarly && ctx.endEarly(), 300); }
       }
       if (ext.over) break;
       simT += DT;
@@ -398,7 +399,10 @@ export function mountRT(el, ctx, G) {
     if ((simT >= G.TOTAL || ext.over) && !finished) {
       finished = true;
       stopMusic();
-      if (!me.out) { showMsg(G.endText ? G.endText(me) : ext.over ? '{trophy} ¡Quedaste en pie!' : '{trophy} ¡Sobreviviste!', 0); sfx.win(); if (v3) v3.burst(me.x, 0.3, me.y, { n: 60, color: ['#ffd60a', '#ff4d6d', '#3a86ff', '#06d6a0', '#ffffff'], speed: 1, up: 2, size: 0.05, life: 1.6, gravity: 2.5 }); }
+      // lo último que decidió el árbitro (por si llegó junto con el final)
+      if (G.applyHost && ext.hs) G.applyHost(me, ext.hs, simT);
+      if (!me.out) showMsg(G.endText ? G.endText(me) : ext.over ? '{trophy} ¡Quedaste en pie!' : '{trophy} ¡Sobreviviste!', 0);
+      if (!me.out && (!G.won || G.won(me))) { sfx.win(); if (v3) v3.burst(me.x, 0.3, me.y, { n: 60, color: ['#ffd60a', '#ff4d6d', '#3a86ff', '#06d6a0', '#ffffff'], speed: 1, up: 2, size: 0.05, life: 1.6, gravity: 2.5 }); }
       for (const b of bots) saveBot(b);
       submit();
     }
@@ -414,7 +418,8 @@ export function mountRT(el, ctx, G) {
     const ents = [];
     for (const e of others) {
       let s = smooth.get(e.id);
-      if (!s) { s = { x: e.x, y: e.y, z: e.z }; smooth.set(e.id, s); }
+      // un salto grande (p. ej. reaparecer en su puesto) se dibuja directo, sin deslizarse
+      if (!s || (G.snapDist && Math.hypot(e.x - s.x, e.y - s.y) > G.snapDist)) { s = { x: e.x, y: e.y, z: e.z }; smooth.set(e.id, s); }
       s.x += (e.x - s.x) * 0.35;
       s.y += (e.y - s.y) * 0.35;
       s.z += (e.z - s.z) * 0.5;
@@ -431,10 +436,10 @@ export function mountRT(el, ctx, G) {
     paintButtons();
     const hudL = G.hud ? G.hud(me) : me.out ? '{ghost}' : '{heart}'.repeat(Math.max(0, me.h)) + '{heartEmpty}'.repeat(Math.max(0, G.lives - me.h));
     if (hudL !== livesEl.dataset.t) { livesEl.dataset.t = hudL; livesEl.innerHTML = rich(hudL); }
-    timeEl.textContent = Math.max(0, Math.ceil(G.TOTAL - simT));
+    timeEl.textContent = G.timeText ? G.timeText(simT, ext) : Math.max(0, Math.ceil(G.TOTAL - simT));
     const hudR = G.hudRight ? G.hudRight(ents) : `{people} ${ents.filter((e) => !e.out).length}`;
     if (hudR !== aliveEl.dataset.t) { aliveEl.dataset.t = hudR; aliveEl.innerHTML = rich(hudR); }
-    const bn = G.banner ? G.banner(tDraw, W) : null;
+    const bn = G.banner ? G.banner(tDraw, W, ext) : null;
     const key = bn ? bn.text + bn.color : '';
     if (key !== lastBanner) {
       lastBanner = key;

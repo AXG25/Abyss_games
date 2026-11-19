@@ -12,7 +12,7 @@ const TR = 0.61;          // radio de la diana (m)
 const CY = 1.4;           // altura del centro de la diana
 const EYE = 1.55;         // altura de los ojos del arquero
 const INTRO = 2600;
-const REVEAL = 3800;
+const REVEAL = 5200;
 const DRAW_MS = 900;      // tiempo para tensar del todo
 const DRIFT = 0.0042;     // desvío por viento: m por (m/s · m de distancia)
 const RCFG = [
@@ -93,15 +93,15 @@ function run(el, ctx, use3d) {
   el.innerHTML = `
     <div class="ar">
       <div class="ar-top">
-        <span class="ar-round"></span>
-        <span class="ar-wind"><svg class="ar-warrow" viewBox="0 0 40 20"><path d="M2 10h28M22 3l9 7-9 7" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><b>0</b><small>km/h</small></span>
-        <span class="ar-score">${rich('{star} 0')}</span>
+        <span class="ar-round"><small>Ronda</small><b>1/3</b></span>
+        <span class="ar-wind"><small>Viento</small><span><svg class="ar-warrow" viewBox="0 0 40 20"><path d="M2 10h28M22 3l9 7-9 7" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/></svg><b>0</b><i>km/h</i></span></span>
+        <span class="ar-score"><small>Tus puntos</small><span class="ar-slots"><i>–</i><i>–</i><i>–</i></span><b>0</b></span>
       </div>
       <div class="ar-stage">
-        <svg class="ar-cross" viewBox="0 0 100 100"><circle cx="50" cy="50" r="20" fill="none" stroke="#fff" stroke-width="3"/><path d="M50 18v20M50 62v20M18 50h20M62 50h20" stroke="#fff" stroke-width="3" stroke-linecap="round"/><circle cx="50" cy="50" r="2.5" fill="#ff4d6d"/></svg>
-        <div class="ar-power"></div>
+        <div class="ar-dist"></div>
         <div class="ar-msg"></div>
         <div class="ar-pop"></div>
+        <div class="ar-res"></div>
         <div class="ar-hint">Mantén el dedo para <b>tensar</b>, arrástralo para <b>apuntar</b> y suéltalo para <b>disparar</b></div>
       </div>
       <div class="ar-time"><i></i></div>
@@ -109,12 +109,22 @@ function run(el, ctx, use3d) {
     </div>`;
   const $ = (s) => el.querySelector(s);
   const stage = $('.ar-stage'), msgEl = $('.ar-msg'), pop = $('.ar-pop'), hint = $('.ar-hint');
-  const windEl = $('.ar-wind'), windB = $('.ar-wind b'), roundEl = $('.ar-round'), scoreEl = $('.ar-score');
-  const timeBar = $('.ar-time i'), powerEl = $('.ar-power'), board = $('.ar-board');
+  const windEl = $('.ar-wind'), windB = $('.ar-wind b'), roundEl = $('.ar-round b'), scoreEl = $('.ar-score b'), slotsEl = $('.ar-slots');
+  const timeBar = $('.ar-time i'), board = $('.ar-board'), resEl = $('.ar-res'), distEl = $('.ar-dist');
   const t0 = performance.now();
   const my = [null, null, null];
   // estado compartido con la vista
   const st = { k: -1, R: null, phase: 'intro', aim: { x: 0, y: 0 }, holding: false, holdAt: 0, power: 0, wind: 0, shots: [], reveal: [], fired: false };
+  st.powerAt = (now) => (st.holding ? Math.min(1, (now - st.holdAt) / DRAW_MS) : 0);
+  const ringClass = (s) => (s >= 9 ? 'gold' : s >= 7 ? 'red' : s >= 5 ? 'blue' : s >= 3 ? 'black' : s >= 1 ? 'white' : 'miss');
+  const paintSlots = () => {
+    slotsEl.innerHTML = my.map((e, k) => {
+      if (!e) return `<i class="${k === st.k ? 'cur' : ''}">–</i>`;
+      const v = typeof e.x === 'number' ? ringOf(e.x, e.y) : 0;
+      return `<i class="${ringClass(v)}">${v}</i>`;
+    }).join('');
+    scoreEl.textContent = total();
+  };
   let view = null, dead = false, lastTick = -1;
   let ptr = null;
 
@@ -135,7 +145,6 @@ function run(el, ctx, use3d) {
     const R = st.R;
     st.fired = true;
     st.holding = false;
-    powerEl.classList.remove('on');
     const power = Math.min(1, (now - st.holdAt) / DRAW_MS);
     const sw = st.sway(now);
     const w = windAt(R, now - t0 - R.aim);
@@ -151,16 +160,16 @@ function run(el, ctx, use3d) {
     if (view) view.shoot(x, y, ctx.color, fl);
     setTimeout(() => {
       if (dead) return;
-      if (s === 0) { sfx.whoosh(); pop.innerHTML = '¡Fallaste!'; pop.className = 'ar-pop on miss'; }
+      if (s === 0) { sfx.whoosh(); pop.innerHTML = '<b>0</b><small>¡Fallaste!</small>'; pop.className = 'ar-pop on miss'; }
       else {
         sfx.thunk();
         const X = isX(x, y);
-        pop.innerHTML = X ? '¡CENTRO!' : String(s);
-        pop.className = `ar-pop on r${s}${X ? ' x' : ''}`;
+        pop.innerHTML = `<b>${s}</b><small>${X ? '¡CENTRO!' : s === 1 ? 'punto' : 'puntos'}</small>`;
+        pop.className = `ar-pop on ${ringClass(s)}${X ? ' x' : ''}`;
         if (X || s >= 9) { setTimeout(() => sfx.big(), 120); if (X) say('¡Al centro!'); }
         if (view) view.impact(x, y, s, X);
       }
-      scoreEl.innerHTML = rich(`{star} ${total()}`);
+      paintSlots();
       if (power < 0.6) setTimeout(() => !dead && say1('Tensa más el arco: la flecha cayó', 1600), 600);
     }, fl * 1000);
   };
@@ -175,7 +184,6 @@ function run(el, ctx, use3d) {
     st.holding = true;
     st.holdAt = performance.now();
     st.px = e.clientX; st.py = e.clientY;
-    powerEl.classList.add('on');
     hint.classList.add('gone');
     sfx.draw();
   });
@@ -224,7 +232,10 @@ function run(el, ctx, use3d) {
       st.holding = false;
       st.revealed = false;
       pop.className = 'ar-pop';
-      roundEl.textContent = `Ronda ${nk + 1}/3 · ${st.R.d} m`;
+      resEl.classList.remove('on');
+      roundEl.textContent = `${nk + 1}/3`;
+      distEl.textContent = `${st.R.d} m`;
+      paintSlots();
       say1(`Ronda ${nk + 1} · diana a ${st.R.d} m${st.R.flip ? '<br><small>¡El viento cambia de dirección!</small>' : ''}`, INTRO - 300);
       sfx.warn();
       if (view) view.newRound(st.R);
@@ -249,8 +260,6 @@ function run(el, ctx, use3d) {
       timeBar.parentElement.classList.toggle('hurry', left < 3000);
       const sec = Math.ceil(left / 1000);
       if (left < 3000 && sec !== lastTick && !st.fired) { lastTick = sec; sfx.tick(); }
-      if (st.holding) powerEl.style.setProperty('--p', Math.min(1, (now - st.holdAt) / DRAW_MS).toFixed(3));
-      powerEl.classList.toggle('full', st.holding && now - st.holdAt >= DRAW_MS);
       if (left <= 0) {
         st.phase = 'wait';
         if (st.holding) { ptr = null; fire(now); }
@@ -259,6 +268,9 @@ function run(el, ctx, use3d) {
           my[st.k] = { s: 0, m: 1 };
           ctx.submit({ r: my });
           say1('{timer} ¡Se acabó el tiempo!', 1600);
+          pop.innerHTML = '<b>0</b><small>Sin disparar</small>';
+          pop.className = 'ar-pop on miss';
+          paintSlots();
           sfx.out(0.6);
         }
       }
@@ -273,6 +285,14 @@ function run(el, ctx, use3d) {
       if (view) view.reveal(res.filter(({ p, e }) => p.id !== ctx.me && e && typeof e.x === 'number').map(({ p, e }) => ({ x: e.x, y: e.y, c: p.c })));
       const best = res.reduce((m, { e }) => Math.max(m, e && typeof e.x === 'number' ? ringOf(e.x, e.y) : 0), 0);
       if (best) sfx.bell();
+      // tarjeta de resultados de la ronda
+      const rows = res.map(({ p, e }) => ({ p, v: e && typeof e.x === 'number' ? ringOf(e.x, e.y) : 0, X: !!(e && typeof e.x === 'number' && isX(e.x, e.y)) }))
+        .sort((a, b) => b.v - a.v || (totals[b.p.id] || 0) - (totals[a.p.id] || 0));
+      const esc2 = (t) => String(t).replace(/[<>&]/g, '');
+      resEl.innerHTML = `<h4>${st.k === 2 ? 'Última ronda' : `Ronda ${st.k + 1}`} · ${R.d} m</h4>` + rows.map((r) => `
+        <div class="ar-row${r.p.id === ctx.me ? ' me' : ''}"><i style="background:${r.p.c}"></i><span>${esc2(r.p.n).slice(0, 10)}</span>
+          <b class="${ringClass(r.v)}">${r.v}${r.X ? '<small>★</small>' : ''}</b><em>${totals[r.p.id] || 0}</em></div>`).join('') + '<div class="ar-row head"><span></span><span></span><small>ronda</small><small>total</small></div>';
+      setTimeout(() => { if (!dead && st.revealed) { resEl.classList.add('on'); pop.className = 'ar-pop'; } }, 1200);
     }
   }, 30);
 
@@ -443,23 +463,43 @@ function build3D(m, stage, st, ctx) {
   const ol = new THREE.DirectionalLight('#ffffff', 1.6);
   ol.position.set(1, 2, 1);
   oScene.add(ol);
+  // mira (dentro del juego, siempre en el centro exacto de la vista)
+  const crossG = new THREE.Group();
+  crossG.position.z = -0.5;
+  const ui = (geo, color, op = 1) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthTest: false, depthWrite: false })); m.renderOrder = 10; crossG.add(m); return m; };
+  ui(new THREE.RingGeometry(0.0165, 0.0245, 48), '#1b1035', 0.55);
+  ui(new THREE.RingGeometry(0.0185, 0.0225, 48), '#ffffff');
+  for (const [x, y, w, h] of [[0, 0.033, 0.004, 0.018], [0, -0.033, 0.004, 0.018], [0.033, 0, 0.018, 0.004], [-0.033, 0, 0.018, 0.004]]) {
+    ui(new THREE.PlaneGeometry(w + 0.003, h + 0.003), '#1b1035', 0.55).position.set(x, y, 0);
+    ui(new THREE.PlaneGeometry(w, h), '#ffffff').position.set(x, y, 0.0001);
+  }
+  ui(new THREE.CircleGeometry(0.0035, 16), '#ff4d6d');
+  const SEG = 64;
+  const powerRing = ui(new THREE.RingGeometry(0.029, 0.035, SEG, 1, Math.PI / 2, Math.PI * 2), '#ffd60a');
+  const powerBg = ui(new THREE.RingGeometry(0.029, 0.035, SEG), '#ffffff', 0.2);
+  oScene.add(crossG);
   const bow = new THREE.Group();
+  const bowBody = new THREE.Group();
+  bow.add(bowBody);
   const curve = new THREE.CatmullRomCurve3([
     new THREE.Vector3(0, 0.46, 0.02), new THREE.Vector3(0, 0.3, -0.07), new THREE.Vector3(0, 0.12, -0.13),
     new THREE.Vector3(0, 0, -0.14), new THREE.Vector3(0, -0.12, -0.13), new THREE.Vector3(0, -0.3, -0.07), new THREE.Vector3(0, -0.46, 0.02),
   ]);
   const limb = new THREE.Mesh(new THREE.TubeGeometry(curve, 40, 0.017, 8), new THREE.MeshStandardMaterial({ color: '#8b4513', roughness: 0.45, metalness: 0.1 }));
-  bow.add(limb);
+  bowBody.add(limb);
   const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.13, 10), new THREE.MeshStandardMaterial({ color: ctx.color, roughness: 0.6 }));
   grip.position.set(0, 0, -0.14);
-  bow.add(grip);
+  bowBody.add(grip);
   const strGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.46, 0.02), new THREE.Vector3(0, 0, 0.02), new THREE.Vector3(0, -0.46, 0.02)]);
   const string = new THREE.Line(strGeo, new THREE.LineBasicMaterial({ color: '#ffffff' }));
-  bow.add(string);
+  bowBody.add(string);
   const nocked = makeArrow(THREE, ctx.color, 0.55);
   bow.add(nocked);
-  bow.position.set(-0.14, -0.06, -0.5);
-  bow.rotation.z = -0.22;
+  // el arco a la izquierda; la flecha justo debajo de la mira apuntando al centro
+  bowBody.position.x = -0.13;
+  bowBody.rotation.z = 0.12;
+  bow.position.set(0, -0.07, -0.5);
+  nocked.scale.setScalar(0.7);
   oScene.add(bow);
   S.overlay = { scene: oScene, camera: oCam };
 
@@ -473,7 +513,11 @@ function build3D(m, stage, st, ctx) {
     a.position.set(x, y, 0.3);
     a.rotation.set(tilt, tilt * 0.7, 0);
     target.add(a);
-    const pin = new THREE.Mesh(new THREE.SphereGeometry(0.028, 10, 8), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.5 }));
+    const pin = new THREE.Mesh(new THREE.SphereGeometry(0.034, 12, 8), new THREE.MeshStandardMaterial({ color, emissive: color, emissiveIntensity: 0.6 }));
+    const halo = new THREE.Mesh(new THREE.RingGeometry(0.036, 0.05, 24), new THREE.MeshBasicMaterial({ color: '#ffffff' }));
+    halo.position.set(x, y, 0.008);
+    target.add(halo);
+    arrows.push(halo);
     pin.position.set(x, y, 0.012);
     target.add(pin);
     arrows.push(a, pin);
@@ -512,16 +556,24 @@ function build3D(m, stage, st, ctx) {
     const goalPull = st.holding ? Math.min(1, (now - st.holdAt) / DRAW_MS) : 0;
     pull += (goalPull - pull) * Math.min(1, dt * (st.holding ? 10 : 30));
     twang = Math.max(0, twang - dt * 3);
-    const zN = 0.02 + pull * 0.26 + Math.sin(now / 18) * twang * 0.03;
+    const zN = 0.02 + pull * 0.17 + Math.sin(now / 18) * twang * 0.03;
     const sp = strGeo.attributes.position;
-    sp.setXYZ(1, 0, 0, zN);
+    sp.setXYZ(1, 0.13 * Math.cos(0.12), -0.13 * Math.sin(0.12), zN);
     sp.needsUpdate = true;
     limb.scale.set(1, 1 - pull * 0.04, 1 + pull * 0.35);
-    nocked.position.set(0, 0, zN - 0.38);
+    nocked.position.set(0, 0, zN - 0.38 * 0.7);
     nocked.visible = !st.fired && st.phase !== 'reveal';
     const shake = st.holding ? 0.004 + (fatigueOf(now) - 1) * 0.006 : 0;
-    bow.position.set(-0.14 + sw.x * 0.02 + (Math.random() - 0.5) * shake, -0.06 + sw.y * 0.02 - pull * 0.01 + (Math.random() - 0.5) * shake, -0.5 + pull * 0.05);
+    bow.position.set((Math.random() - 0.5) * shake, -0.07 - pull * 0.008 + (Math.random() - 0.5) * shake, -0.5 + pull * 0.05);
     bow.visible = st.phase !== 'reveal';
+    // mira y anillo de tensión
+    crossG.visible = st.phase === 'aim' || st.phase === 'wait';
+    const pw = st.powerAt(now);
+    powerRing.geometry.setDrawRange(0, Math.round(pw * SEG) * 6);
+    powerRing.material.color.set(pw >= 1 ? '#06d6a0' : '#ffd60a');
+    powerBg.visible = powerRing.visible = st.holding;
+    const cs = (st.holding && pw >= 1 ? 1.08 : 1);
+    crossG.scale.set(cs, cs, 1);
     oCam.aspect = S.aspect;
     oCam.updateProjectionMatrix();
     // flecha en vuelo
@@ -606,7 +658,15 @@ function build2D(stage, st) {
       g.fillStyle = '#d4a373'; g.fillRect(cx - 0.8 * sc, cy - 0.8 * sc, 1.6 * sc, 1.6 * sc);
       const cols = ['#f8f9fa', '#f8f9fa', '#212529', '#212529', '#1e90ff', '#1e90ff', '#e63946', '#e63946', '#ffd60a', '#ffd60a'];
       for (let i = 0; i < 10; i++) { g.beginPath(); g.arc(cx, cy, TR * sc * (1 - i / 10), 0, TAU); g.fillStyle = cols[i]; g.fill(); g.strokeStyle = '#212529'; g.lineWidth = 1; g.stroke(); }
-      for (const o of hits) { g.beginPath(); g.arc(cx + o.x * sc, cy - o.y * sc, Math.max(4, 0.03 * sc), 0, TAU); g.fillStyle = o.c; g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke(); }
+      for (const o of hits) { g.beginPath(); g.arc(cx + o.x * sc, cy - o.y * sc, Math.max(5, 0.035 * sc), 0, TAU); g.fillStyle = o.c; g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke(); }
+      if (st.phase === 'aim' || st.phase === 'wait') {
+        const m = w / 2, n = h / 2, rr = Math.min(w, h) * 0.05;
+        g.lineWidth = 3; g.strokeStyle = '#fff';
+        g.beginPath(); g.arc(m, n, rr, 0, TAU); g.stroke();
+        g.beginPath(); g.moveTo(m, n - rr * 1.9); g.lineTo(m, n - rr * 1.1); g.moveTo(m, n + rr * 1.1); g.lineTo(m, n + rr * 1.9); g.moveTo(m - rr * 1.9, n); g.lineTo(m - rr * 1.1, n); g.moveTo(m + rr * 1.1, n); g.lineTo(m + rr * 1.9, n); g.stroke();
+        const pw = st.powerAt(now);
+        if (st.holding) { g.lineWidth = 5; g.strokeStyle = pw >= 1 ? '#06d6a0' : '#ffd60a'; g.beginPath(); g.arc(m, n, rr * 1.45, -Math.PI / 2, -Math.PI / 2 + pw * TAU); g.stroke(); }
+      }
     }
     raf = requestAnimationFrame(frame);
   };

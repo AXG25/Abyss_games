@@ -8,8 +8,9 @@ import { DT, TAU, mountRT, simulateBot, drawPlayer } from '../rt.js';
 const LAPS = 3;
 const TOTAL = 80;
 const N = 480;          // puntos del trazado
-const HW = 0.22;        // medio ancho del asfalto
-const LIM = HW + 0.17;  // muro de llantas
+const HW = 0.4;         // medio ancho del asfalto (4 carriles)
+const LIM = HW + 0.18;  // muro de llantas
+const LANE = HW / 2;    // ancho de un carril
 const KR = 0.075;       // radio de choque de un kart
 const VMAX = 1.45;
 const TURN = 3.6;
@@ -25,13 +26,18 @@ function buildTrack(seed) {
   const r = mulberry32(seed ^ 0x7ace);
   const a1 = 0.12 + r() * 0.13, a2 = 0.05 + r() * 0.09, a3 = r() * 0.04;
   const p1 = r() * TAU, p2 = r() * TAU, p3 = r() * TAU;
-  const sx = 1.2 + r() * 0.3, R0 = 2.1;
+  const sx = 1.2 + r() * 0.3, R0 = 2.35;
   const xs = new Float32Array(N), ys = new Float32Array(N);
-  for (let i = 0; i < N; i++) {
-    const th = (i / N) * TAU;
-    const rr = R0 * (1 + a1 * Math.sin(2 * th + p1) + a2 * Math.sin(3 * th + p2) + a3 * Math.sin(5 * th + p3));
-    xs[i] = Math.cos(th) * rr * sx;
-    ys[i] = Math.sin(th) * rr;
+  // con 4 carriles las curvas no pueden ser muy cerradas: si alguna lo es,
+  // se suaviza el trazado hasta que el borde interior no se doble
+  for (let f = 1; ; f *= 0.85) {
+    for (let i = 0; i < N; i++) {
+      const th = (i / N) * TAU;
+      const rr = R0 * (1 + f * (a1 * Math.sin(2 * th + p1) + a2 * Math.sin(3 * th + p2) + a3 * Math.sin(5 * th + p3)));
+      xs[i] = Math.cos(th) * rr * sx;
+      ys[i] = Math.sin(th) * rr;
+    }
+    if (f < 0.2 || minCurve(xs, ys) > LIM + 0.25) break;
   }
   const seg = new Float32Array(N), cum = new Float32Array(N + 1);
   const tx = new Float32Array(N), ty = new Float32Array(N), nx = new Float32Array(N), ny = new Float32Array(N);
@@ -50,6 +56,17 @@ function buildTrack(seed) {
   let ext = 0, rmax = 0;
   for (let i = 0; i < N; i++) { ext = Math.max(ext, Math.abs(xs[i]), Math.abs(ys[i])); rmax = Math.max(rmax, Math.hypot(xs[i], ys[i])); }
   return { xs, ys, seg, cum, tx, ty, nx, ny, L, inSign, ext: ext + LIM, rmax: rmax + LIM };
+}
+
+function minCurve(xs, ys) {
+  let m = 1e9;
+  for (let i = 0; i < N; i++) {
+    const a = (i + N - 4) % N, c = (i + 4) % N;
+    const A = Math.hypot(xs[i] - xs[c], ys[i] - ys[c]), B = Math.hypot(xs[a] - xs[c], ys[a] - ys[c]), C = Math.hypot(xs[a] - xs[i], ys[a] - ys[i]);
+    const area = Math.abs((xs[i] - xs[a]) * (ys[c] - ys[a]) - (xs[c] - xs[a]) * (ys[i] - ys[a])) / 2;
+    if (area > 1e-9) m = Math.min(m, (A * B * C) / (4 * area));
+  }
+  return m;
 }
 
 // punto del trazado a distancia s (con desplazamiento lateral d)
@@ -111,11 +128,11 @@ const G = {
     const free = (s, list) => list.every((o) => Math.abs(sDiff(T, s, o.s)) > 1.2);
     for (let k = 0; k < 40 && pads.length < 5; k++) {
       const s = 1.5 + r() * (T.L - 3);
-      if (free(s, pads)) pads.push({ id: pads.length, s, d: (r() * 2 - 1) * 0.1 });
+      if (free(s, pads)) pads.push({ id: pads.length, s, d: (Math.floor(r() * 4) - 1.5) * LANE });
     }
     for (let k = 0; k < 40 && oils.length < 5; k++) {
       const s = 2 + r() * (T.L - 3.5);
-      if (free(s, oils) && free(s, pads)) oils.push({ id: oils.length, s, d: (r() < 0.5 ? -1 : 1) * (0.05 + r() * 0.09) });
+      if (free(s, oils) && free(s, pads)) oils.push({ id: oils.length, s, d: (Math.floor(r() * 4) - 1.5) * LANE + (r() - 0.5) * 0.05 });
     }
     for (const o of [...pads, ...oils]) { const q = pointAt(T, o.s, o.d); o.x = q.x; o.y = q.y; o.ang = q.ang; }
     return { T, pads, oils };
@@ -123,8 +140,8 @@ const G = {
 
   spawn(i, W) {
     const T = W.T;
-    const row = Math.floor(i / 2), lane = i % 2 ? -0.1 : 0.1;
-    const s = T.L - 0.35 - row * 0.32 - (i % 2) * 0.12;
+    const lane = (1.5 - (i % 4)) * LANE;
+    const s = T.L - 0.35 - (i % 2) * 0.14;
     const q = pointAt(T, s, lane);
     return {
       x: q.x, y: q.y, z: 0, h: 0, inv: 0, out: false, act: false, dash: 0, dcd: 0,
@@ -195,7 +212,7 @@ const G = {
     }
     // flechas de impulso
     for (const pd of W.pads) {
-      if (Math.abs(sDiff(T, q.s, pd.s)) < 0.12 && Math.abs(q.d - pd.d) < 0.11 && (p.padId !== pd.id || t - p.padT > 1.5)) {
+      if (Math.abs(sDiff(T, q.s, pd.s)) < 0.12 && Math.abs(q.d - pd.d) < 0.12 && (p.padId !== pd.id || t - p.padT > 1.5)) {
         p.padId = pd.id; p.padT = t;
         p.dash = Math.max(p.dash, 0.9);
         ev = ev || 'pad';
@@ -223,13 +240,13 @@ const G = {
     const r = mulberry32((seed ^ (0x51ed * (idx + 7))) >>> 0);
     const skill = 0.8 + r() * 0.13;
     const look = 0.42 + r() * 0.18;
-    let lane = (r() * 2 - 1) * 0.1, laneT = 0;
+    let lane = (r() * 2 - 1) * 0.25, laneT = 0;
     return (p, t) => {
-      if (t > laneT) { lane = (r() * 2 - 1) * 0.12; laneT = t + 1.5 + r() * 2.5; }
+      if (t > laneT) { lane = (r() * 2 - 1) * 0.28; laneT = t + 1.5 + r() * 2.5; }
       // esquivar aceite que viene
       for (const o of W.oils) {
         const ahead = sDiff(T, o.s, p.ls);
-        if (ahead > 0 && ahead < 1.1 && Math.abs(lane - o.d) < 0.12 && r() < 0.85) lane = Math.max(-0.16, Math.min(0.16, o.d + (o.d > 0 ? -0.18 : 0.18)));
+        if (ahead > 0 && ahead < 1.1 && Math.abs(lane - o.d) < 0.12 && r() < 0.85) lane = Math.max(-0.32, Math.min(0.32, o.d + (o.d > 0 ? -LANE : LANE)));
       }
       const tg = pointAt(T, p.ls + look, lane);
       const dx = tg.x - p.x, dy = tg.y - p.y, l = Math.hypot(dx, dy) || 1;
@@ -300,8 +317,8 @@ const G = {
     follow: true,
     camYaw: CAM_YAW,
     camElev: 50,
-    camFit: 0.82,
-    camFitZ: 0.78,
+    camFit: 1.0,
+    camFitZ: 0.95,
     lookAhead(e) {
       const a = typeof e.ang === 'number' ? e.ang : (e.e && e.e.a) || 0;
       return { x: Math.cos(a) * 0.28, y: Math.sin(a) * 0.28 };
@@ -394,9 +411,11 @@ function buildScene(S, W) {
   const roadTex = canvasTex(THREE, 128, 128, (g) => {
     g.fillStyle = '#5a5d66'; g.fillRect(0, 0, 128, 128);
     for (let i = 0; i < 500; i++) { const v = 70 + Math.random() * 40; g.fillStyle = `rgb(${v},${v},${v + 6})`; g.fillRect(Math.random() * 128, Math.random() * 128, 2, 2); }
-    g.fillStyle = '#f1f1f1'; g.fillRect(61, 0, 6, 64);
+    g.fillStyle = '#f1f1f1';
+    for (const x of [32, 64, 96]) g.fillRect(x - 2, 0, 4, 64);
+    g.fillRect(0, 0, 3, 128); g.fillRect(125, 0, 3, 128);
   }, true);
-  const road = new THREE.Mesh(ribbon(THREE, T, HW, -HW, 0.004, 0.004, 0.55), new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.85 }));
+  const road = new THREE.Mesh(ribbon(THREE, T, HW, -HW, 0.004, 0.004, 0.7), new THREE.MeshStandardMaterial({ map: roadTex, roughness: 0.85 }));
   road.receiveShadow = true;
   scene.add(road);
   // bordillos rojo y blanco
@@ -524,7 +543,7 @@ function buildScene(S, W) {
     for (const y of [22, 52, 82]) { g.beginPath(); g.moveTo(12, y); g.lineTo(32, y - 16); g.lineTo(52, y); g.stroke(); }
   });
   S.objs.padMeshes = W.pads.map((pd, k) => {
-    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.22), new THREE.MeshStandardMaterial({ map: padTex, emissive: '#ffb703', emissiveMap: padTex, emissiveIntensity: 1 }));
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(0.17, 0.24), new THREE.MeshStandardMaterial({ map: padTex, emissive: '#ffb703', emissiveMap: padTex, emissiveIntensity: 1 }));
     m.rotation.x = -Math.PI / 2;
     const g = new THREE.Group();
     g.add(m);

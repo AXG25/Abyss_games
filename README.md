@@ -9,7 +9,7 @@ compiten ronda tras ronda por estrellas ⭐.
 | | Juego | Cómo se gana |
 |---|---|---|
 | 🗡️ | Ruleta de espadas *(3D)* | 5 espadas por ronda a una ruleta que acelera: +2, ×2, ÷2… en orden. Gana quien gane más de las 3 rondas |
-| 🏎️ | Gran Premio *(3D, tiempo real)* | Carrera de karts isométrica a 3 vueltas: turbo, flechas de impulso, aceite y minimapa |
+| 🏎️ | Gran Premio *(3D, tiempo real)* | Carrera de karts isométrica a 3 vueltas en una pista de 4 carriles: turbo, flechas de impulso, aceite y minimapa |
 | 🏹 | Tiro con arco *(3D)* | 3 rondas de precisión (18, 30 y 45 m): tensa, apunta y suelta compensando el viento antes de que se acabe el tiempo |
 | 👊 | Machaca el botón *(3D)* | Carrera de torres: cada toque hace crecer tu torre |
 | 🤠 | Reflejos de vaquero *(3D)* | Duelo del oeste a 3 rondas: el más rápido en disparar tras la campana tumba a todos |

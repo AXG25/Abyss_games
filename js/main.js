@@ -30,6 +30,25 @@ const S = {
   unsubs: [],
 };
 
+// Si el celular tenía guardada una versión vieja (caché), recargar la nueva.
+async function newerVersion() {
+  const mine = document.documentElement.dataset.v;
+  if (!mine) return false;
+  try {
+    const ctl = new AbortController();
+    setTimeout(() => ctl.abort(), 2500);
+    const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store', signal: ctl.signal });
+    if (!r.ok) return false;
+    const { v } = await r.json();
+    if (!v || v === mine) return false;
+    const key = 'pp_reload_' + v;
+    if (sessionStorage.getItem(key)) return false; // ya lo intentamos: no hacer bucles
+    sessionStorage.setItem(key, '1');
+    location.replace(location.pathname + '?v=' + v + location.hash);
+    return true;
+  } catch { return false; }
+}
+
 function getUid() {
   try {
     let u = sessionStorage.getItem('pp_uid');
@@ -41,6 +60,7 @@ function getUid() {
 // ---------------------------------------------------------------- arranque
 boot();
 async function boot() {
+  if (await newerVersion()) return;
   renderHome();
   S.lobby = await connectLobby();
   S.lobby.onPeers(() => { if (!S.nr) renderOpenRooms(); });

@@ -91,3 +91,13 @@ y regístralo en `js/games/index.js`.
 python3 -m http.server 8765
 # abre http://localhost:8765 en dos pestañas
 ```
+
+## Publicar una versión nueva
+
+Antes de cada `git push`, ejecuta:
+
+```
+node tools/version.mjs
+```
+
+Esto sella la versión en `index.html`: el CSS y todos los módulos JS se piden con `?v=<versión>`. Así el celular nunca mezcla archivos viejos de la caché con los nuevos. Si alguien abre una versión vieja, la página detecta la nueva (`version.json`) y se recarga sola.

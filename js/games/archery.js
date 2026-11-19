@@ -467,16 +467,16 @@ function build3D(m, stage, st, ctx) {
   const crossG = new THREE.Group();
   crossG.position.z = -0.5;
   const ui = (geo, color, op = 1) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthTest: false, depthWrite: false })); m.renderOrder = 10; crossG.add(m); return m; };
-  ui(new THREE.RingGeometry(0.0165, 0.0245, 48), '#1b1035', 0.55);
-  ui(new THREE.RingGeometry(0.0185, 0.0225, 48), '#ffffff');
-  for (const [x, y, w, h] of [[0, 0.033, 0.004, 0.018], [0, -0.033, 0.004, 0.018], [0.033, 0, 0.018, 0.004], [-0.033, 0, 0.018, 0.004]]) {
-    ui(new THREE.PlaneGeometry(w + 0.003, h + 0.003), '#1b1035', 0.55).position.set(x, y, 0);
+  ui(new THREE.RingGeometry(0.0098, 0.0152, 48), '#1b1035', 0.5);
+  ui(new THREE.RingGeometry(0.0112, 0.0138, 48), '#ffffff');
+  for (const [x, y, w, h] of [[0, 0.021, 0.0026, 0.011], [0, -0.021, 0.0026, 0.011], [0.021, 0, 0.011, 0.0026], [-0.021, 0, 0.011, 0.0026]]) {
+    ui(new THREE.PlaneGeometry(w + 0.002, h + 0.002), '#1b1035', 0.5).position.set(x, y, 0);
     ui(new THREE.PlaneGeometry(w, h), '#ffffff').position.set(x, y, 0.0001);
   }
-  ui(new THREE.CircleGeometry(0.0035, 16), '#ff4d6d');
+  ui(new THREE.CircleGeometry(0.0022, 16), '#ff4d6d');
   const SEG = 64;
-  const powerRing = ui(new THREE.RingGeometry(0.029, 0.035, SEG, 1, Math.PI / 2, Math.PI * 2), '#ffd60a');
-  const powerBg = ui(new THREE.RingGeometry(0.029, 0.035, SEG), '#ffffff', 0.2);
+  const powerRing = ui(new THREE.RingGeometry(0.019, 0.0225, SEG, 1, Math.PI / 2, Math.PI * 2), '#ffd60a');
+  const powerBg = ui(new THREE.RingGeometry(0.019, 0.0225, SEG), '#ffffff', 0.2);
   oScene.add(crossG);
   const bow = new THREE.Group();
   const bowBody = new THREE.Group();
@@ -487,19 +487,20 @@ function build3D(m, stage, st, ctx) {
   ]);
   const limb = new THREE.Mesh(new THREE.TubeGeometry(curve, 40, 0.017, 8), new THREE.MeshStandardMaterial({ color: '#8b4513', roughness: 0.45, metalness: 0.1 }));
   bowBody.add(limb);
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.13, 10), new THREE.MeshStandardMaterial({ color: ctx.color, roughness: 0.6 }));
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.11, 12), new THREE.MeshStandardMaterial({ color: ctx.color, roughness: 0.6 }));
   grip.position.set(0, 0, -0.14);
   bowBody.add(grip);
   const strGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.46, 0.02), new THREE.Vector3(0, 0, 0.02), new THREE.Vector3(0, -0.46, 0.02)]);
   const string = new THREE.Line(strGeo, new THREE.LineBasicMaterial({ color: '#ffffff' }));
   bowBody.add(string);
-  const nocked = makeArrow(THREE, ctx.color, 0.55);
+  const nocked = makeArrow(THREE, ctx.color, 0.32);
   bow.add(nocked);
   // el arco a la izquierda; la flecha justo debajo de la mira apuntando al centro
-  bowBody.position.x = -0.13;
-  bowBody.rotation.z = 0.12;
-  bow.position.set(0, -0.07, -0.5);
-  nocked.scale.setScalar(0.7);
+  const BX = -0.024, CANT = 0.45;  // agarre pegado a la flecha; arco inclinado hacia la izquierda
+  bowBody.position.x = BX;
+  bowBody.rotation.z = CANT;
+  bow.position.set(0, -0.1, -0.5);
+  nocked.scale.setScalar(0.62);
   oScene.add(bow);
   S.overlay = { scene: oScene, camera: oCam };
 
@@ -558,13 +559,13 @@ function build3D(m, stage, st, ctx) {
     twang = Math.max(0, twang - dt * 3);
     const zN = 0.02 + pull * 0.17 + Math.sin(now / 18) * twang * 0.03;
     const sp = strGeo.attributes.position;
-    sp.setXYZ(1, 0.13 * Math.cos(0.12), -0.13 * Math.sin(0.12), zN);
+    sp.setXYZ(1, -BX * Math.cos(CANT), BX * Math.sin(CANT), zN);
     sp.needsUpdate = true;
     limb.scale.set(1, 1 - pull * 0.04, 1 + pull * 0.35);
-    nocked.position.set(0, 0, zN - 0.38 * 0.7);
+    nocked.position.set(0, 0, zN - 0.38 * 0.62);
     nocked.visible = !st.fired && st.phase !== 'reveal';
     const shake = st.holding ? 0.004 + (fatigueOf(now) - 1) * 0.006 : 0;
-    bow.position.set((Math.random() - 0.5) * shake, -0.07 - pull * 0.008 + (Math.random() - 0.5) * shake, -0.5 + pull * 0.05);
+    bow.position.set((Math.random() - 0.5) * shake, -0.1 - pull * 0.008 + (Math.random() - 0.5) * shake, -0.5 + pull * 0.05);
     bow.visible = st.phase !== 'reveal';
     // mira y anillo de tensión
     crossG.visible = st.phase === 'aim' || st.phase === 'wait';
@@ -660,7 +661,7 @@ function build2D(stage, st) {
       for (let i = 0; i < 10; i++) { g.beginPath(); g.arc(cx, cy, TR * sc * (1 - i / 10), 0, TAU); g.fillStyle = cols[i]; g.fill(); g.strokeStyle = '#212529'; g.lineWidth = 1; g.stroke(); }
       for (const o of hits) { g.beginPath(); g.arc(cx + o.x * sc, cy - o.y * sc, Math.max(5, 0.035 * sc), 0, TAU); g.fillStyle = o.c; g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke(); }
       if (st.phase === 'aim' || st.phase === 'wait') {
-        const m = w / 2, n = h / 2, rr = Math.min(w, h) * 0.05;
+        const m = w / 2, n = h / 2, rr = Math.min(w, h) * 0.032;
         g.lineWidth = 3; g.strokeStyle = '#fff';
         g.beginPath(); g.arc(m, n, rr, 0, TAU); g.stroke();
         g.beginPath(); g.moveTo(m, n - rr * 1.9); g.lineTo(m, n - rr * 1.1); g.moveTo(m, n + rr * 1.1); g.lineTo(m, n + rr * 1.9); g.moveTo(m - rr * 1.9, n); g.lineTo(m - rr * 1.1, n); g.moveTo(m + rr * 1.1, n); g.lineTo(m + rr * 1.9, n); g.stroke();

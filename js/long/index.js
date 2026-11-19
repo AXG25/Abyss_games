@@ -9,6 +9,8 @@ import * as chess from './chess.js';
 import { mountChess } from './chess-ui.js';
 import * as parques from './parques.js';
 import { mountParques } from './parques-ui.js';
+import * as domino from './domino.js';
+import { mountDomino } from './domino-ui.js';
 
 export const LONG_GAMES = [
   {
@@ -34,6 +36,14 @@ export const LONG_GAMES = [
     min: 2, max: 4, mins: '20–45 min',
     rules: parques,
     mount: mountParques,
+  },
+  {
+    id: 'domino',
+    name: 'Dominó',
+    desc: 'Doble seis, a 100 puntos. Con 4 jugadores es por parejas; con 2 o 3, cada uno por su cuenta con pozo. ¡Dominó o tranque!',
+    min: 2, max: 4, mins: '15–40 min',
+    rules: domino,
+    mount: mountDomino,
   },
 ];
 export const LONG_BY_ID = Object.fromEntries(LONG_GAMES.map((g) => [g.id, g]));

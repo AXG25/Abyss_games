@@ -257,7 +257,11 @@ Host.prototype.longTick = function () {
   if (!(lg.win || lg.end)) {
     const who = L.rules.current(lg);
     const p = st.pl.find((x) => x.id === who);
-    if (p && p.b) {
+    // jugadas sin opción (pasar, robar) o pausas del juego: las hace solo tras `delay`
+    const delay = L.rules.autoDelay ? L.rules.autoDelay(lg) : null;
+    if (delay != null) {
+      if (now - this.turnAt >= delay && L.rules.act(lg, who, L.rules.autoMove(lg, who), { elapsed: now - this.turnAt })) { changed = true; this.syncTurn(lg); }
+    } else if (p && p.b) {
       // bots: piensan un momento y juegan
       if (now >= this.botAt && L.rules.act(lg, who, L.rules.autoMove(lg, who), { elapsed: now - this.turnAt })) { changed = true; this.syncTurn(lg); }
     } else if (L.rules.onTime) {

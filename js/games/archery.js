@@ -467,16 +467,16 @@ function build3D(m, stage, st, ctx) {
   const crossG = new THREE.Group();
   crossG.position.z = -0.5;
   const ui = (geo, color, op = 1) => { const m = new THREE.Mesh(geo, new THREE.MeshBasicMaterial({ color, transparent: true, opacity: op, depthTest: false, depthWrite: false })); m.renderOrder = 10; crossG.add(m); return m; };
-  ui(new THREE.RingGeometry(0.0098, 0.0152, 48), '#1b1035', 0.5);
-  ui(new THREE.RingGeometry(0.0112, 0.0138, 48), '#ffffff');
-  for (const [x, y, w, h] of [[0, 0.021, 0.0026, 0.011], [0, -0.021, 0.0026, 0.011], [0.021, 0, 0.011, 0.0026], [-0.021, 0, 0.011, 0.0026]]) {
-    ui(new THREE.PlaneGeometry(w + 0.002, h + 0.002), '#1b1035', 0.5).position.set(x, y, 0);
+  ui(new THREE.RingGeometry(0.0110, 0.0140, 64), '#1b1035', 0.45);
+  ui(new THREE.RingGeometry(0.0118, 0.0132, 64), '#ffffff');
+  for (const [x, y, w, h] of [[0, 0.021, 0.0014, 0.011], [0, -0.021, 0.0014, 0.011], [0.021, 0, 0.011, 0.0014], [-0.021, 0, 0.011, 0.0014]]) {
+    ui(new THREE.PlaneGeometry(w + 0.0014, h + 0.0014), '#1b1035', 0.45).position.set(x, y, 0);
     ui(new THREE.PlaneGeometry(w, h), '#ffffff').position.set(x, y, 0.0001);
   }
-  ui(new THREE.CircleGeometry(0.0022, 16), '#ff4d6d');
+  ui(new THREE.CircleGeometry(0.0016, 16), '#ff4d6d');
   const SEG = 64;
-  const powerRing = ui(new THREE.RingGeometry(0.019, 0.0225, SEG, 1, Math.PI / 2, Math.PI * 2), '#ffd60a');
-  const powerBg = ui(new THREE.RingGeometry(0.019, 0.0225, SEG), '#ffffff', 0.2);
+  const powerRing = ui(new THREE.RingGeometry(0.0192, 0.0212, SEG, 1, Math.PI / 2, Math.PI * 2), '#ffd60a');
+  const powerBg = ui(new THREE.RingGeometry(0.0192, 0.0212, SEG), '#ffffff', 0.2);
   oScene.add(crossG);
   const bow = new THREE.Group();
   const bowBody = new THREE.Group();
@@ -493,7 +493,7 @@ function build3D(m, stage, st, ctx) {
   const strGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.46, 0.02), new THREE.Vector3(0, 0, 0.02), new THREE.Vector3(0, -0.46, 0.02)]);
   const string = new THREE.Line(strGeo, new THREE.LineBasicMaterial({ color: '#ffffff' }));
   bowBody.add(string);
-  const nocked = makeArrow(THREE, ctx.color, 0.32);
+  const nocked = makeArrow(THREE, ctx.color, 0.5);
   bow.add(nocked);
   // el arco a la izquierda; la flecha justo debajo de la mira apuntando al centro
   const BX = -0.024, CANT = 0.45;  // agarre pegado a la flecha; arco inclinado hacia la izquierda
@@ -662,7 +662,7 @@ function build2D(stage, st) {
       for (const o of hits) { g.beginPath(); g.arc(cx + o.x * sc, cy - o.y * sc, Math.max(5, 0.035 * sc), 0, TAU); g.fillStyle = o.c; g.fill(); g.lineWidth = 2; g.strokeStyle = '#fff'; g.stroke(); }
       if (st.phase === 'aim' || st.phase === 'wait') {
         const m = w / 2, n = h / 2, rr = Math.min(w, h) * 0.032;
-        g.lineWidth = 3; g.strokeStyle = '#fff';
+        g.lineWidth = 1.5; g.strokeStyle = '#fff';
         g.beginPath(); g.arc(m, n, rr, 0, TAU); g.stroke();
         g.beginPath(); g.moveTo(m, n - rr * 1.9); g.lineTo(m, n - rr * 1.1); g.moveTo(m, n + rr * 1.1); g.lineTo(m, n + rr * 1.9); g.moveTo(m - rr * 1.9, n); g.lineTo(m - rr * 1.1, n); g.moveTo(m + rr * 1.1, n); g.lineTo(m + rr * 1.9, n); g.stroke();
         const pw = st.powerAt(now);

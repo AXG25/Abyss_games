@@ -14,17 +14,15 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-html, body { margin: 0; height: 100%; }
+/* color de fondo sólido debajo de todo: nunca se ve blanco al hacer scroll */
+html { margin: 0; min-height: 100%; background: var(--bg1); }
 body {
+  margin: 0;
+  min-height: 100%;
   font-family: 'Nunito', system-ui, sans-serif;
   font-weight: 800;
   color: var(--ink);
-  background:
-    radial-gradient(circle at 15% 10%, rgba(255, 77, 109, 0.35), transparent 40%),
-    radial-gradient(circle at 90% 30%, rgba(58, 134, 255, 0.35), transparent 45%),
-    radial-gradient(circle at 50% 100%, rgba(6, 214, 160, 0.25), transparent 50%),
-    linear-gradient(160deg, var(--bg1), var(--bg2));
-  background-attachment: fixed;
+  background: transparent;
   overscroll-behavior: none;
   user-select: none;
   -webkit-user-select: none;
@@ -33,7 +31,16 @@ body {
 button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action: manipulation; }
 input { font: inherit; user-select: text; -webkit-user-select: text; }
 
-#app { min-height: 100%; }
+/* degradado fijo que cubre siempre la pantalla (iPhone no soporta background-attachment: fixed) */
+body::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(255, 77, 109, 0.35), transparent 40%),
+    radial-gradient(circle at 90% 30%, rgba(58, 134, 255, 0.35), transparent 45%),
+    radial-gradient(circle at 50% 100%, rgba(6, 214, 160, 0.25), transparent 50%),
+    linear-gradient(160deg, var(--bg1), var(--bg2));
+}
+#app { min-height: 100%; position: relative; }
 .boot { display: grid; place-items: center; min-height: 100vh; font-family: var(--display); font-size: 24px; }
 
 .screen {

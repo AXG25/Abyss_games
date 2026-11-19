@@ -2,6 +2,7 @@
 // turnos y los puntos, y lo publica en su `presence` como `st`. Los demás
 // teléfonos solo leen `st` y envían sus resultados en su propia `presence.in`.
 import { GAMES, GAME_BY_ID } from './games/index.js';
+import { LONG_BY_ID } from './long/index.js';
 import { mulberry32, shuffle, BOT_NAMES, BOT_AVATARS } from './util.js';
 import { validAvatar } from './icons.js';
 
@@ -21,8 +22,12 @@ export class Host {
     this.hs = Date.now();
     this.timer = null;
     this.last = '';
-    if (prev && prev.pl) {
-      this.st = { ...prev, ph: 'lobby', k: (prev.k || 0) + 1, rk: [] };
+    if (prev && prev.pl && prev.ph === 'long' && prev.lg && LONG_BY_ID[prev.lgId]) {
+      // el anfitrión anterior se fue a mitad de un juego largo: seguimos la partida
+      this.st = { ...prev, k: (prev.k || 0) + 1 };
+      this.startLongLoop();
+    } else if (prev && prev.pl) {
+      this.st = { ...prev, ph: 'lobby', k: (prev.k || 0) + 1, rk: [], lg: null };
     } else {
       this.st = { ph: 'lobby', k: 1, R: 5, r: 0, g: null, seed: 0, pl: [], bots: 0, rk: [], seq: [] };
     }
@@ -32,6 +37,7 @@ export class Host {
 
   destroy() {
     clearInterval(this.iv);
+    clearInterval(this.liv);
     clearTimeout(this.timer);
   }
 
@@ -172,11 +178,78 @@ export class Host {
 
   toLobby() {
     clearTimeout(this.timer);
+    clearInterval(this.liv);
+    this.st.lg = null;
     this.st.rk = [];
     this.go('lobby');
     this.tick();
   }
 }
+
+// ---- juegos largos (cartas, etc.): por turnos, el anfitrión aplica las reglas
+// y publica el estado en st.lg. Los demás mandan sus jugadas en presence.la.
+Host.prototype.startLong = function (id, keepScore = false) {
+  const L = LONG_BY_ID[id];
+  if (!L) return false;
+  this.tick();
+  const st = this.st;
+  if (st.pl.length < L.min) return false;
+  const prevWins = keepScore && st.lg && st.lgId === id ? st.lg.wins : {};
+  st.lgId = id;
+  st.lk = Math.floor(Math.random() * 2 ** 31);
+  st.lg = L.rules.init(st.pl.map((p) => p.id), Math.floor(Math.random() * 2 ** 31), prevWins);
+  st.rk = [];
+  this.go('long');
+  this.startLongLoop();
+  return true;
+};
+
+Host.prototype.startLongLoop = function () {
+  clearInterval(this.liv);
+  this.lastN = {};
+  this.turnSeen = -1;
+  this.liv = setInterval(() => this.longTick(), 200);
+};
+
+// Jugada de este teléfono (el anfitrión).
+Host.prototype.longAct = function (id, a) {
+  const st = this.st;
+  const L = LONG_BY_ID[st.lgId];
+  if (st.ph !== 'long' || !st.lg || !L || !a || a.tn !== st.lg.tn) return;
+  if (L.rules.act(st.lg, id, a)) this.publish();
+};
+
+Host.prototype.longTick = function () {
+  const st = this.st;
+  const L = LONG_BY_ID[st.lgId];
+  if (st.ph !== 'long' || !st.lg || !L) return;
+  const lg = st.lg;
+  let changed = false;
+  // jugadas de los demás (cada una dice para qué turno era: no se aplica dos veces)
+  for (const peer of this.nr.peers()) {
+    if (peer.isMe) continue;
+    const la = peer.presence && peer.presence.la;
+    if (!la || la.lk !== st.lk || typeof la.n !== 'number') continue;
+    const id = pid(peer);
+    if (la.n <= (this.lastN[id] || 0)) continue;
+    this.lastN[id] = la.n;
+    if (la.a && la.a.tn === lg.tn && L.rules.act(lg, id, la.a)) changed = true;
+  }
+  if (!lg.win) {
+    const now = Date.now();
+    if (lg.tn !== this.turnSeen) {
+      this.turnSeen = lg.tn;
+      this.turnAt = now;
+      this.botAt = now + 900 + Math.random() * 900;
+    }
+    const who = L.rules.current(lg);
+    const p = st.pl.find((x) => x.id === who);
+    // bots: piensan un momento; humanos: si se les acaba el tiempo, juega solo
+    const late = !p || (p.b ? now >= this.botAt : now - this.turnAt > (p.off ? L.rules.OFF_TURN_MS : L.rules.TURN_MS));
+    if (late && L.rules.act(lg, who, L.rules.autoMove(lg, who))) changed = true;
+  }
+  if (changed) this.publish();
+};
 
 // Busca al anfitrión vigente entre los pares de una sala.
 export function findHost(peers) {

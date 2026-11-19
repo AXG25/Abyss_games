@@ -1,6 +1,7 @@
 import { connectLobby, LocalRoom } from './net.js';
 import { Host, findHost, MAX_PLAYERS } from './engine.js';
 import { GAMES, GAME_BY_ID } from './games/index.js';
+import { LONG_GAMES, LONG_BY_ID } from './long/index.js';
 import { preload3D } from './rt.js';
 import { isMuted, setMuted, sfx } from './audio.js';
 import { esc, $, $$, beep, buzz, fanfare, store, toast, COLORS, AVATARS } from './util.js';
@@ -306,6 +307,7 @@ function onRoomChange() {
 
 function render(st) {
   if (st.ph === 'lobby') return renderRoomLobby(st);
+  if (st.ph === 'long') return renderLong(st);
   const key = st.k + ':' + st.ph;
   if (key === S.screenKey) {
     if (st.ph === 'final') renderFinalControls(st);
@@ -388,6 +390,11 @@ function renderRoomLobby(st) {
         <div class="lbl center">o prueba un solo juego</div>
         <div class="games-grid">${GAMES.map((g) => `<button class="game-card" data-g="${g.id}">${gameIcon(g.id)}<b>${esc(g.name)}</b>${g.realtime || g.uses3d ? '<i class="rt-tag">3D</i>' : ''}</button>`).join('')}</div>
       ` : `<div class="card waiting"><div class="dots"><i></i><i></i><i></i></div><p>Esperando a que el anfitrión ${icon('crown')} empiece…</p></div>`}
+      <div class="long-sec">
+        <div class="lbl center">Juegos largos</div>
+        <p class="hint">Aparte de la fiesta: una partida completa con tus amigos${isHost ? '. Toca uno para empezar.' : '. El anfitrión elige cuál.'}</p>
+        <div class="long-list">${LONG_GAMES.map((g) => `<button class="long-card" data-lg="${g.id}" ${isHost ? '' : 'disabled'}>${gameIcon(g.id)}<span><b>${esc(g.name)}</b><small>${esc(g.desc)}</small><em>${icon('people')} ${g.min}–${g.max} jugadores · ${esc(g.mins)}</em></span></button>`).join('')}</div>
+      </div>
     </section>`;
   updateNetPill();
   $('#leave').onclick = leaveRoom;
@@ -407,7 +414,42 @@ function renderRoomLobby(st) {
     $('#botminus').onclick = () => { S.host.setBots(st.bots - 1); beep(400, 0.05); };
     $('#start').onclick = () => { fanfare(); S.host.start(); };
     $('.games-grid').onclick = (e) => { const b = e.target.closest('[data-g]'); if (b) { fanfare(); S.host.start(b.dataset.g); } };
+    $('.long-list').onclick = (e) => {
+      const b = e.target.closest('[data-lg]');
+      if (!b) return;
+      const g = LONG_BY_ID[b.dataset.lg];
+      if (!S.host.startLong(g.id)) { toast(`Se necesitan al menos ${g.min} jugadores: agrega un bot o espera a un amigo`, 3200); return; }
+      fanfare();
+    };
   }
+}
+
+// ---------------------------------------------------------------- juegos largos
+function renderLong(st) {
+  const L = LONG_BY_ID[st.lgId];
+  if (!L || !st.lg) return;
+  const key = `long:${st.lk}`;
+  if (S.screenKey !== key) {
+    S.screenKey = key;
+    S.lobbySig = '';
+    stopGame();
+    const view = L.mount(app, {
+      me: S.me,
+      isHost: () => !!S.host,
+      colorOf: (id) => colorOf(currentState() || st, id),
+      act: (a) => {
+        if (S.host) { S.host.longAct(S.me, a); return; }
+        S.laN = Math.max((S.laN || 0) + 1, Date.now());
+        S.nr && S.nr.presence({ la: { lk: st.lk, n: S.laN, a } }).catch(() => {});
+      },
+      again: () => { if (S.host) { fanfare(); S.host.startLong(st.lgId, true); } },
+      lobby: () => { if (S.host) S.host.toLobby(); },
+      leave: () => { if (confirm('¿Salir de la sala?')) leaveRoom(); },
+    });
+    S.unmountGame = () => view.destroy();
+    S.longView = view;
+  }
+  S.longView.update(st);
 }
 
 // ---------------------------------------------------------------- intro

@@ -26,6 +26,23 @@ compiten ronda tras ronda por estrellas ⭐.
 
 Puntos por ronda: 1.º 3⭐ · 2.º 2⭐ · 3.º 1⭐ · 4.º 0⭐.
 
+## Juegos largos
+
+Aparte de la fiesta de mini juegos, en la sala hay una sección **Juegos largos**:
+el anfitrión crea la sala, los amigos se unen y él toca el juego para empezar.
+
+| | Juego | Reglas |
+|---|---|---|
+| 🃏 | Ocho loco *(2–4)* | Baraja francesa. Tira del mismo palo o número; el 8 es comodín y cambia el palo; el 2 hace robar 2 (se acumula); la J salta; la Q cambia el sentido. Gana quien se quede sin cartas |
+
+- Por turnos: el anfitrión aplica las reglas (`js/long/ocho.js`) y publica el
+  estado en `st.lg`; los demás envían sus jugadas en `presence.la`. Cada jugada
+  dice para qué turno era (`tn`), así nunca se aplica dos veces.
+- 30 s por turno: si se acaba, juega solo (6 s si el jugador se desconectó).
+- Los bots también juegan. Si el anfitrión se va, otro sigue la partida.
+- Para agregar otro juego largo: reglas + pantalla en `js/long/` y regístralo en
+  `js/long/index.js`.
+
 ## Cómo funciona
 
 - **Sin servidor propio.** Se despliega como página alojada en Claude, que trae

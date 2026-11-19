@@ -230,7 +230,9 @@ Host.prototype.syncTurn = function (lg) {
   this.turnAt = now;
   const L = LONG_BY_ID[this.st.lgId];
   const [b0, b1] = (L && L.rules.BOT_MS) || [900, 1800];
-  this.botAt = now + b0 + Math.random() * (b1 - b0);
+  // START_MS (opcional): pausa antes de la primera jugada (p. ej. mientras se ven repartir las cartas)
+  const start = lg.tn === 1 && L && L.rules.START_MS ? L.rules.START_MS : 0;
+  this.botAt = now + start + b0 + Math.random() * (b1 - b0);
 };
 
 Host.prototype.longTick = function () {

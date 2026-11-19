@@ -13,8 +13,8 @@
 //
 // Cada jugada queda en `lg.ev` (y las últimas 3 en `lg.hist`) con lo que hace falta
 // para explicarla: a quién saltó la J (skip), si la Q cambió el sentido (rev),
-// a quién le toca responder el +2 (to, sum), si la carta robada sirve (keep) y
-// quién juega después (next).
+// a quién le toca responder el +2 (to, sum), si la carta robada sirve (keep),
+// el palo que había antes de un 8 (was) y quién juega después (next).
 //
 // Cartas: texto de 2-3 letras, palo + número: 'H8', 'S10', 'DQ', 'CA'.
 //   Palos: H corazones, D diamantes, C tréboles, S picas.
@@ -25,6 +25,7 @@ export const SUIT_NAME = { H: 'Corazones', D: 'Diamantes', C: 'Tréboles', S: 'P
 export const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 export const TURN_MS = 30000;      // tiempo por turno (si se acaba, juega solo)
 export const OFF_TURN_MS = 6000;   // tiempo por turno de alguien desconectado
+export const START_MS = 2600;      // los bots esperan a que se vea el reparto de cartas
 
 export const suitOf = (c) => c[0];
 export const rankOf = (c) => c.slice(1);
@@ -122,8 +123,10 @@ export function act(lg, pid, a) {
     hand.splice(i, 1);
     lg.disc.push(c);
     const k = rankOf(c);
+    const was = lg.suit;
     lg.suit = k === '8' ? (SUITS.includes(a.s) ? a.s : bestSuit(hand)) : suitOf(c);
     lg.ev = { p: pid, t: 'play', c, s: lg.suit, n: lg.tn };
+    if (k === '8') lg.ev.was = was;   // palo que había antes del 8 (para el aviso de cambio)
     if (!hand.length) {
       lg.win = pid;
       lg.wins[pid] = (lg.wins[pid] || 0) + 1;

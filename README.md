@@ -50,6 +50,11 @@ el anfitrión crea la sala, los amigos se unen y él toca el juego para empezar.
   veces seguidas: robó una carta que le sirvió, o salió una J (o una Q con 2
   jugadores). La pantalla solo repinta lo que cambió (antes la barra de tiempo
   del que jugaba volvía a llenarse con cada actualización de la sala).
+  Animaciones: reparto de cartas al empezar (los bots esperan `START_MS`), cartas
+  que vuelan del mazo a quien roba y de la mano a la mesa, avisos grandes de los
+  poderes (cambio de palo del 8, +2, salta, reversa, "robó N cartas"), avisos de
+  "es tu turno" y "le queda una carta", y flechas entre los jugadores con la
+  etiqueta **Sigue** para ver hacia dónde va el turno.
 - Ajedrez: reloj por jugador (`onTime`). Revancha con colores cambiados. Las
   reglas se comprueban con *perft* (conteo de jugadas en posiciones de prueba).
 - Parqués (`js/long/parques-ui.js`): el tablero fijo es un `<svg>` que se dibuja
@@ -64,6 +69,8 @@ el anfitrión crea la sala, los amigos se unen y él toca el juego para empezar.
   exigen el número de turno y se mandan completas (la última gana).
 - `autoDelay(lg)` (opcional): jugadas sin opción (pasar, robar del pozo) o
   pausas (resultado de la mano en el dominó) que el anfitrión hace solo.
+- `START_MS` (opcional): pausa de los bots antes de la primera jugada (Ocho loco:
+  mientras se ve el reparto).
 - Para agregar otro juego largo: reglas + pantalla en `js/long/` y regístralo en
   `js/long/index.js`.
 

@@ -168,6 +168,8 @@ const I = {
   medal2: '<path d="M7 2h4l2 6H9zM13 2h4l-2 6h-4z" fill="#ff4d6d" stroke="#1b1035" stroke-width="1.2"/><circle cx="12" cy="15" r="7" fill="#d9dde3" stroke="#1b1035" stroke-width="1.5"/><text x="12" y="19" font-size="9.5" font-weight="900" text-anchor="middle" fill="#5c677d" font-family="system-ui">2</text>',
   medal3: '<path d="M7 2h4l2 6H9zM13 2h4l-2 6h-4z" fill="#06d6a0" stroke="#1b1035" stroke-width="1.2"/><circle cx="12" cy="15" r="7" fill="#e09f5a" stroke="#1b1035" stroke-width="1.5"/><text x="12" y="19" font-size="9.5" font-weight="900" text-anchor="middle" fill="#7a4410" font-family="system-ui">3</text>',
   medal4: '<circle cx="12" cy="13" r="8" fill="#5a4a7a" stroke="#1b1035" stroke-width="1.5"/><text x="12" y="17.2" font-size="10" font-weight="900" text-anchor="middle" fill="#fff" font-family="system-ui">4</text>',
+  jump: '<path d="M12 3l6.5 7H14.5v5h-5v-5H5.5z" fill="#fff" stroke="#1b1035" stroke-width="1.5" stroke-linejoin="round"/><path d="M5 19.5h3M10.5 19.5h3M16 19.5h3" stroke="#fff" stroke-width="2.2" stroke-linecap="round"/>',
+  attack: '<path d="M12 2l1.8 5.2L19 5l-2.2 5.2L22 12l-5.2 1.8L19 19l-5.2-2.2L12 22l-1.8-5.2L5 19l2.2-5.2L2 12l5.2-1.8L5 5l5.2 2.2z" fill="#ffd23f" stroke="#1b1035" stroke-width="1.4" stroke-linejoin="round"/><circle cx="12" cy="12" r="3" fill="#ff4d6d"/>',
   // figuras para "Cuenta rápida"
   drop: '<path d="M12 3c3 4.5 5.5 7.5 5.5 11a5.5 5.5 0 01-11 0C6.5 10.5 9 7.5 12 3z" fill="#3a86ff" stroke="#1b1035" stroke-width="1.5"/>',
   leaf: '<path d="M4 20C4 9 10 4 20 4c0 10-5 16-16 16z" fill="#06d6a0" stroke="#1b1035" stroke-width="1.5" stroke-linejoin="round"/><path d="M5 19L15 9" stroke="#1b1035" stroke-width="1.3"/>',

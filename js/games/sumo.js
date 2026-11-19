@@ -15,6 +15,8 @@ const radiusAt = (t) => Math.max(0.5, 0.9 - Math.max(0, t - 8) * 0.0135);
 const G = {
   TOTAL, LIVES, lives: LIVES, PR,
   action: '¡ATACA!',
+  actionIcon: 'attack',
+  cd1: (p) => (p.pcd > 0 ? p.pcd / 1.1 : 0),
   fallText: '{sparkle} ¡Fuera del estadio!',
   music: 'battle',
 

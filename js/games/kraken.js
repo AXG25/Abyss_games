@@ -92,6 +92,8 @@ function armPoints(arm, t, segs) {
 export const G = {
   TOTAL, LIVES, lives: LIVES, PR,
   action: 'SALTA',
+  actionIcon: 'jump',
+  cd1: (p) => (p.jt > 0 ? Math.min(1, (p.jt + 0.1) / (JUMP + 0.1)) : p.cd > 0 ? p.cd / (JUMP + 0.1) : 0),
   music: 'pirate',
 
   world(seed) { return { armsAt: makeArms(seed) }; },
@@ -104,12 +106,24 @@ export const G = {
     return p;
   },
 
-  step(p, inp, t, W) {
+  step(p, inp, t, W, ext) {
     if (p.out) return null;
     const arms = W.armsAt(t);
     let ev = null;
     p.x += inp.x * SPEED * DT;
     p.y += inp.y * SPEED * DT;
+    // choques entre jugadores: se empujan (si uno va saltando, pasa por encima)
+    if (ext && ext.all && !((p.z || 0) > 0.3)) {
+      for (const o of ext.all) {
+        if (!o || o === p || o.id === p.id || o.out || (o.z || 0) > 0.3) continue;
+        const dx = p.x - o.x, dy = p.y - o.y, d = Math.hypot(dx, dy);
+        if (d > 1e-4 && d < PR * 2.1) {
+          const over = PR * 2.1 - d;
+          p.x += (dx / d) * over * 0.55;
+          p.y += (dy / d) * over * 0.55;
+        }
+      }
+    }
     clampShip(p);
     const r = Math.hypot(p.x, p.y) || 1e-6;
     if (r < HOLE + PR) { p.x *= (HOLE + PR) / r; p.y *= (HOLE + PR) / r; }

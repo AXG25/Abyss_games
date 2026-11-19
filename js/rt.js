@@ -18,7 +18,7 @@
 //   opcionales: pack(p) → datos extra en red, hud(p), banner(t, W), sounds
 import { beep, buzz } from './util.js';
 import { sfx, say, music, stopMusic, musicTempo } from './audio.js';
-import { avatarImage, rich } from './icons.js';
+import { avatarImage, rich, icon } from './icons.js';
 
 export const DT = 1 / 60;
 // Cuenta regresiva antes de empezar (también la suma el anfitrión a la duración).
@@ -139,7 +139,10 @@ export function mountRT(el, ctx, G) {
       <div class="k-board"><canvas></canvas><div class="k-top" hidden></div><div class="k-msg" hidden></div><div class="k-banner" hidden></div></div>
       <div class="k-ctrl">
         <div class="k-joy"><div class="k-knob"></div></div>
-        ${G.action ? `<button class="k-jump" style="--c:${ctx.color}">${G.action}</button>` : '<div class="k-tip">Muévete con el joystick</div>'}
+        ${G.action ? `<div class="k-btns">
+          ${G.action2 ? `<button class="k-act k-act2" data-a="2" style="--c:${ctx.color}"><span class="k-ico">${icon(G.actionIcon2 || 'bolt')}</span><b>${G.action2}</b></button>` : ''}
+          <button class="k-act k-act1" data-a="1" style="--c:${ctx.color}"><span class="k-ico">${icon(G.actionIcon || 'bolt')}</span><b>${G.action}</b></button>
+        </div>` : '<div class="k-tip">Muévete con el joystick</div>'}
       </div>
     </div>`;
   const canvas = el.querySelector('canvas');
@@ -153,7 +156,7 @@ export function mountRT(el, ctx, G) {
   const topEl = el.querySelector('.k-top');
   const joy = el.querySelector('.k-joy');
   const knob = el.querySelector('.k-knob');
-  const actBtn = el.querySelector('.k-jump');
+  const actBtns = [...el.querySelectorAll('.k-act')];
   const view = { size: 300, R: 138, X: (v) => v, Y: (v) => v };
 
   const resize = () => {
@@ -228,12 +231,37 @@ export function mountRT(el, ctx, G) {
   const endJoy = (e) => { if (e.pointerId !== joyId) return; joyId = null; inp.x = inp.y = 0; setKnob(0, 0); };
   joy.addEventListener('pointerup', endJoy);
   joy.addEventListener('pointercancel', endJoy);
-  if (actBtn) {
-    actBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); me.act = true; actBtn.classList.add('down'); });
-    actBtn.addEventListener('pointerup', () => actBtn.classList.remove('down'));
+  for (const b of actBtns) {
+    const two = b.dataset.a === '2';
+    b.addEventListener('pointerdown', (e) => { e.preventDefault(); if (two) me.act2 = true; else me.act = true; b.classList.add('down'); });
+    const up = () => b.classList.remove('down');
+    b.addEventListener('pointerup', up);
+    b.addEventListener('pointercancel', up);
+    b.addEventListener('pointerleave', up);
   }
+  // recarga de los botones: 1 = recién usado (oscuro), 0 = listo (color real)
+  const cdOf = [(p) => (G.cd1 ? G.cd1(p) : (p.dcd > 0 ? p.dcd / 1.3 : 0)), (p) => (G.cd2 ? G.cd2(p) : (p.dcd > 0 ? p.dcd / 1.3 : 0))];
+  const cdPrev = [0, 0];
+  const paintButtons = () => {
+    for (const b of actBtns) {
+      const i = b.dataset.a === '2' ? 1 : 0;
+      const f = me.out ? 1 : Math.max(0, Math.min(1, cdOf[i](me) || 0));
+      if (Math.abs(f - cdPrev[i]) > 0.004 || (f === 0 && cdPrev[i] !== 0)) {
+        b.style.setProperty('--cd', f.toFixed(3));
+        b.classList.toggle('cooling', f > 0);
+        if (f === 0 && cdPrev[i] > 0 && !me.out) {
+          b.classList.remove('ready');
+          void b.offsetWidth;
+          b.classList.add('ready');
+          sfx.ready();
+        }
+        cdPrev[i] = f;
+      }
+      b.classList.toggle('off', !!me.out);
+    }
+  };
   const keys = new Set();
-  const kd = (e) => { keys.add(e.key); if (e.key === ' ') me.act = true; };
+  const kd = (e) => { keys.add(e.key); if (e.key === ' ') me.act = true; if (e.key === 'Shift') me.act2 = true; };
   const ku = (e) => keys.delete(e.key);
   addEventListener('keydown', kd);
   addEventListener('keyup', ku);
@@ -399,6 +427,7 @@ export function mountRT(el, ctx, G) {
     else G.draw(g, view, tDraw, W, ents, ctx.me, ext);
     const top = G.topText ? G.topText(tDraw, W, ext) : null;
     if ((top || '') !== (topEl.dataset.t || '') || !!top === topEl.hidden) { topEl.hidden = !top; topEl.innerHTML = rich(top || ''); topEl.dataset.t = top || ''; topEl.classList.toggle('danger', !!(top && top.danger)); }
+    paintButtons();
     const hudL = G.hud ? G.hud(me) : me.out ? '{ghost}' : '{heart}'.repeat(Math.max(0, me.h)) + '{heartEmpty}'.repeat(Math.max(0, G.lives - me.h));
     if (hudL !== livesEl.dataset.t) { livesEl.dataset.t = hudL; livesEl.innerHTML = rich(hudL); }
     timeEl.textContent = Math.max(0, Math.ceil(G.TOTAL - simT));

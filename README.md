@@ -14,7 +14,7 @@ compiten ronda tras ronda por estrellas ⭐.
 | 🧠 | Simón dice | Repetir la secuencia de 6 colores |
 | ⏱️ | Para en 5.00 | Detener el cronómetro oculto lo más cerca de 5.00 s |
 | 🐙 | Kraken en cubierta *(tiempo real)* | Saltar los tentáculos que giran en el barco; sobrevivir más |
-| 💣 | Lluvia de bombas *(tiempo real)* | Esquivar las bombas por su sombra; 3 vidas |
+| 💣 | Lluvia de bombas *(tiempo real)* | Esquivar bombas, cajas que caen y barriles que ruedan (se saltan); 3 vidas |
 | 🟩 | Pisa el color *(tiempo real)* | Pararse en el color anunciado antes de que el piso se caiga |
 | 🪙 | Fiebre de monedas *(tiempo real)* | Recoger más monedas en 30 s |
 | 🌀 | Trompos de batalla *(tiempo real)* | Embestir con tu trompo a los demás para sacarlos del estadio |

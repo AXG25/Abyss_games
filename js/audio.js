@@ -138,6 +138,7 @@ export const sfx = {
   heart: (v = 1) => { tone({ type: 'sine', f0: 70, f1: 45, dur: 0.12, vol: 0.25 * v }); tone({ type: 'sine', f0: 65, f1: 40, dur: 0.14, vol: 0.18 * v, at: 0.18 }); },
   wind: (v = 1) => noise({ dur: 2.5, vol: 0.05 * v, type: 'bandpass', f0: 400, f1: 900, q: 0.8, attack: 0.8 }),
   thud: (v = 1) => { tone({ type: 'sine', f0: 120, f1: 50, dur: 0.2, vol: 0.2 * v }); noise({ dur: 0.15, vol: 0.1 * v, f0: 600 }); },
+  ready: () => tone({ type: 'sine', f0: 1320, f1: 1760, dur: 0.09, vol: 0.035 }),
   tick: (v = 1) => tone({ type: 'square', f0: 1800, dur: 0.03, vol: 0.04 * v }),
   pass: (v = 1) => { tone({ type: 'square', f0: 520, f1: 1040, dur: 0.12, vol: 0.06 * v }); noise({ dur: 0.15, vol: 0.06 * v, type: 'bandpass', f0: 1500, q: 3 }); },
   fuse: (v = 1) => noise({ dur: 0.12, vol: 0.05 * v, type: 'bandpass', f0: 5000, q: 2 }),

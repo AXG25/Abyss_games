@@ -2,6 +2,7 @@
 // anfitrión y envía las jugadas. Las reglas están en caos.js.
 import { ELEMS, ELEM_NAME, TURN_MS, OFF_TURN_MS, elemOf, kindOf, canPlay, top, current, ranking } from './caos.js';
 import { avatarSVG, validAvatar, icon } from '../icons.js';
+import { endPanel, endPanelHide } from './endpanel.js';
 import { esc, buzz } from '../util.js';
 import { sfx, isMuted, setMuted } from '../audio.js';
 
@@ -241,9 +242,9 @@ export function mountCaos(el, ctx) {
   }
 
   function paintEnd() {
-    if (!lg.win) { endEl.hidden = true; return; }
+    if (!lg.win) { endPanelHide(endEl); return; }
     const won = lg.win === me();
-    endEl.hidden = false;
+    
     endEl.innerHTML = `
       <div class="oc-end-box">
         <div class="oc-end-av" style="--c:${ctx.colorOf(lg.win)}">${avatarSVG(validAvatar(player(lg.win).a))}</div>
@@ -257,6 +258,7 @@ export function mountCaos(el, ctx) {
           : '<p class="hint">Esperando al anfitrión para otra partida…</p>'}
       </div>`;
     if (ctx.isHost()) { $('#ca-again').onclick = () => ctx.again(); $('#ca-lobby').onclick = () => ctx.lobby(); }
+    endPanel(endEl, `${lg.tn}:${lg.win}`, 1800);
   }
 
   function sounds() {

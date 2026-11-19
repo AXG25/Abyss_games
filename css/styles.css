@@ -14,15 +14,23 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-/* color de fondo sólido debajo de todo: nunca se ve blanco al hacer scroll */
-html { margin: 0; min-height: 100%; background: var(--bg1); }
+/* Fondo: el degradado va en <body>, que mide como mínimo toda la pantalla (incluida
+   la zona de las barras del navegador) y crece con el contenido, así cubre toda la
+   página sin depender de capas fijas (Safari del iPhone las recorta). Debajo, en
+   <html>, un color del mismo tono por si el navegador estira la página al rebotar. */
+html { margin: 0; min-height: 100%; background: #2a2360; }
 body {
   margin: 0;
-  min-height: 100%;
+  min-height: 100vh;
+  min-height: 100lvh;
   font-family: 'Nunito', system-ui, sans-serif;
   font-weight: 800;
   color: var(--ink);
-  background: transparent;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(255, 77, 109, 0.35), transparent 40%),
+    radial-gradient(circle at 90% 30%, rgba(58, 134, 255, 0.35), transparent 45%),
+    radial-gradient(circle at 50% 100%, rgba(6, 214, 160, 0.25), transparent 50%),
+    linear-gradient(160deg, var(--bg1), var(--bg2)) var(--bg1);
   overscroll-behavior: none;
   user-select: none;
   -webkit-user-select: none;
@@ -31,15 +39,6 @@ body {
 button { font: inherit; color: inherit; border: 0; cursor: pointer; touch-action: manipulation; }
 input { font: inherit; user-select: text; -webkit-user-select: text; }
 
-/* degradado fijo que cubre siempre la pantalla (iPhone no soporta background-attachment: fixed) */
-body::before {
-  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
-  background:
-    radial-gradient(circle at 15% 10%, rgba(255, 77, 109, 0.35), transparent 40%),
-    radial-gradient(circle at 90% 30%, rgba(58, 134, 255, 0.35), transparent 45%),
-    radial-gradient(circle at 50% 100%, rgba(6, 214, 160, 0.25), transparent 50%),
-    linear-gradient(160deg, var(--bg1), var(--bg2));
-}
 #app { min-height: 100%; position: relative; }
 .boot { display: grid; place-items: center; min-height: 100vh; font-family: var(--display); font-size: 24px; }
 
@@ -993,3 +992,8 @@ input:focus { border-color: var(--yellow); }
 .sp-table td.p100 b { color: var(--green); } .sp-table td.p50 b { color: var(--yellow); } .sp-table td.p0 b { color: #ff8fa3; }
 .sp-next { display: flex; justify-content: center; }
 .sp-next .btn { width: 100%; }
+
+/* resultado de los juegos largos: botón para volver a verlo tras mirar el tablero */
+.end-pill { position: fixed; left: 50%; bottom: calc(18px + env(safe-area-inset-bottom)); transform: translateX(-50%); z-index: 39; box-shadow: 0 6px 18px rgba(0,0,0,.45); animation: ocPop .25s ease-out; }
+.end-pill[hidden] { display: none; }
+.end-peek { margin-top: -4px; }

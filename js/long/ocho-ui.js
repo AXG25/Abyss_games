@@ -2,6 +2,7 @@
 // el anfitrión y envía las jugadas con ctx.act(); las reglas están en ocho.js.
 import { SUITS, SUIT_NAME, TURN_MS, OFF_TURN_MS, suitOf, rankOf, canPlay, top, current, ranking } from './ocho.js';
 import { avatarSVG, validAvatar, icon } from '../icons.js';
+import { endPanel, endPanelHide } from './endpanel.js';
 import { esc, buzz } from '../util.js';
 import { sfx, isMuted, setMuted } from '../audio.js';
 
@@ -213,10 +214,10 @@ export function mountOcho(el, ctx) {
   }
 
   function paintEnd() {
-    if (!lg.win) { endEl.hidden = true; return; }
+    if (!lg.win) { endPanelHide(endEl); return; }
     const won = lg.win === me();
     const rk = ranking(lg);
-    endEl.hidden = false;
+    
     endEl.innerHTML = `
       <div class="oc-end-box">
         <div class="oc-end-av" style="--c:${ctx.colorOf(lg.win)}">${avatarSVG(validAvatar(player(lg.win).a))}</div>
@@ -233,6 +234,7 @@ export function mountOcho(el, ctx) {
       $('#oc-again').onclick = () => ctx.again();
       $('#oc-lobby').onclick = () => ctx.lobby();
     }
+    endPanel(endEl, `${lg.tn}:${lg.win}`, 1800);
   }
 
   function sounds() {

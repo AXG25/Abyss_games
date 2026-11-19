@@ -2,6 +2,7 @@
 // mismo las jugadas legales para marcarlas y envía la jugada con ctx.act().
 import { posOf, legalMoves, inCheck, colorFor, current, colorOf, WHY } from './chess.js';
 import { avatarSVG, validAvatar, icon } from '../icons.js';
+import { endPanel, endPanelHide } from './endpanel.js';
 import { esc, buzz } from '../util.js';
 import { sfx, isMuted, setMuted } from '../audio.js';
 
@@ -219,7 +220,7 @@ export function mountChess(el, ctx) {
 
   function paintMsg() {
     const ck = inCheck(pos);
-    if (lg.end) msgEl.innerHTML = '';
+    if (lg.end) msgEl.innerHTML = `<b class="warn">${lg.why === 'mate' ? '¡Jaque mate!' : WHY[lg.why] || 'Fin'}</b> · ${lg.win ? (lg.win === me() ? '¡Ganaste!' : `Ganó ${esc(player(lg.win).n)}`) : 'Tablas'}`;
     else if (myTurn()) msgEl.innerHTML = ck ? '<b class="warn">¡Jaque! Protege a tu rey</b>' : '<b>Tu turno</b>: toca una pieza y luego a dónde va';
     else if (myCol()) msgEl.innerHTML = `${ck ? '<b class="warn">¡Jaque!</b> ' : ''}Turno de <b style="color:${ctx.colorOf(current(lg))}">${esc(player(current(lg)).n)}</b>`;
     else msgEl.innerHTML = `Mueven las ${lg.turn === 'w' ? 'blancas' : 'negras'}${ck ? ' · <b class="warn">¡Jaque!</b>' : ''}`;
@@ -247,10 +248,10 @@ export function mountChess(el, ctx) {
   }
 
   function paintEnd() {
-    if (!lg.end) { endEl.hidden = true; return; }
+    if (!lg.end) { endPanelHide(endEl); return; }
     const won = lg.win === me();
     const title = lg.win ? (won ? '¡Ganaste!' : `¡Ganó ${esc(player(lg.win).n)}!`) : 'Tablas';
-    endEl.hidden = false;
+    
     endEl.innerHTML = `
       <div class="oc-end-box">
         <div class="oc-end-av" style="--c:${lg.win ? ctx.colorOf(lg.win) : '#9d8df1'}">${lg.win ? avatarSVG(validAvatar(player(lg.win).a)) : pieceSVG('K') }</div>
@@ -266,6 +267,7 @@ export function mountChess(el, ctx) {
       $('#cz-again').onclick = () => ctx.again();
       $('#cz-lobby').onclick = () => ctx.lobby();
     }
+    endPanel(endEl, `${lg.tn}:${lg.why}`, 2800);
   }
 
   function sounds() {

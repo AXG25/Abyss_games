@@ -2,6 +2,7 @@
 // que tu cárcel quede abajo. Dibuja el estado del anfitrión y envía las jugadas.
 import { HOME, LAST_TRACK, SEGUROS, TURN_MS, OFF_TURN_MS, current, absOf, canMove, options } from './parques.js';
 import { avatarSVG, validAvatar, icon } from '../icons.js';
+import { endPanel, endPanelHide } from './endpanel.js';
 import { esc, buzz } from '../util.js';
 import { sfx, isMuted, setMuted } from '../audio.js';
 
@@ -324,8 +325,8 @@ export function mountParques(el, ctx) {
   }
 
   function paintEnd() {
-    if (!lg.win) { endEl.hidden = true; return; }
-    endEl.hidden = false;
+    if (!lg.win) { endPanelHide(endEl); return; }
+    
     const won = lg.win === me();
     endEl.innerHTML = `
       <div class="oc-end-box">
@@ -340,6 +341,7 @@ export function mountParques(el, ctx) {
           : '<p class="hint">Esperando al anfitrión para otra partida…</p>'}
       </div>`;
     if (ctx.isHost()) { $('#pq-again').onclick = () => ctx.again(); $('#pq-lobby').onclick = () => ctx.lobby(); }
+    endPanel(endEl, `${lg.tn}:${lg.win}`, 2200);
   }
 
   function onEvent(prevLg) {

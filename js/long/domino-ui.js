@@ -3,6 +3,7 @@
 // va a la izquierda y sube; los dobles van atravesados. Se ajusta sola al espacio.
 import { TURN_MS, OFF_TURN_MS, current, sidesFor, playable, pips, sideOf, sides, membersOf } from './domino.js';
 import { avatarSVG, validAvatar, icon } from '../icons.js';
+import { endPanel, endPanelHide } from './endpanel.js';
 import { esc, buzz } from '../util.js';
 import { sfx, isMuted, setMuted } from '../audio.js';
 
@@ -292,8 +293,8 @@ export function mountDomino(el, ctx) {
   }
 
   function paintEnd() {
-    if (!lg.win) { endEl.hidden = true; return; }
-    endEl.hidden = false;
+    if (!lg.win) { endPanelHide(endEl); return; }
+    
     const s = lg.winSide;
     const mineWon = sideOf(lg, me()) === s && lg.order.includes(me());
     endEl.innerHTML = `
@@ -307,6 +308,7 @@ export function mountDomino(el, ctx) {
           : '<p class="hint">Esperando al anfitrión para otra partida…</p>'}
       </div>`;
     if (ctx.isHost()) { $('#dm-again').onclick = () => ctx.again(); $('#dm-lobby').onclick = () => ctx.lobby(); }
+    endPanel(endEl, `${lg.tn}:${lg.win}`, 2000);
   }
 
   function sounds() {

@@ -2,6 +2,7 @@
 // que cambia, para no borrar lo que estás escribiendo.
 import { CATS, MAX_CATS, LETTERS, SPIN_MS, STOP_MS, VOTE_MS, SCORE_MS, norm, startsOk, status, votesAgainst, isBot } from './stop.js';
 import { avatarSVG, validAvatar, icon } from '../icons.js';
+import { endPanel, endPanelHide } from './endpanel.js';
 import { esc, buzz } from '../util.js';
 import { sfx, isMuted, setMuted } from '../audio.js';
 
@@ -276,8 +277,8 @@ export function mountStop(el, ctx) {
 
   // ---------------------------------------------------------------- final
   function paintEnd() {
-    if (!lg.win) { endEl.hidden = true; return; }
-    endEl.hidden = false;
+    if (!lg.win) { endPanelHide(endEl); return; }
+    
     const rank = lg.order.slice().sort((a, b) => lg.total[b] - lg.total[a]);
     const won = lg.total[me()] === lg.total[lg.win] && playing();
     endEl.innerHTML = `
@@ -291,6 +292,7 @@ export function mountStop(el, ctx) {
           : '<p class="hint">Esperando al anfitrión para otra partida…</p>'}
       </div>`;
     if (ctx.isHost()) { $('#sp-again').onclick = () => ctx.again(); $('#sp-lobby').onclick = () => ctx.lobby(); }
+    endPanel(endEl, `${lg.tn}:${lg.win}`, 1500);
   }
 
   function showFlash(html, ms = 1600) {

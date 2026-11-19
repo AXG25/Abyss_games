@@ -494,9 +494,9 @@ function build3D(m, stage, st, ctx) {
     new THREE.Vector3(0, 0.46, 0.02), new THREE.Vector3(0, 0.3, -0.07), new THREE.Vector3(0, 0.12, -0.13),
     new THREE.Vector3(0, 0, -0.14), new THREE.Vector3(0, -0.12, -0.13), new THREE.Vector3(0, -0.3, -0.07), new THREE.Vector3(0, -0.46, 0.02),
   ]);
-  const limb = new THREE.Mesh(new THREE.TubeGeometry(curve, 40, 0.017, 8), new THREE.MeshStandardMaterial({ color: '#8b4513', roughness: 0.45, metalness: 0.1 }));
+  const limb = new THREE.Mesh(new THREE.TubeGeometry(curve, 40, 0.01275, 8), new THREE.MeshStandardMaterial({ color: '#8b4513', roughness: 0.45, metalness: 0.1 }));
   bowBody.add(limb);
-  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.02, 0.02, 0.11, 12), new THREE.MeshStandardMaterial({ color: ctx.color, roughness: 0.6 }));
+  const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.015, 0.015, 0.11, 12), new THREE.MeshStandardMaterial({ color: ctx.color, roughness: 0.6 }));
   grip.position.set(0, 0, -0.14);
   bowBody.add(grip);
   const strGeo = new THREE.BufferGeometry().setFromPoints([new THREE.Vector3(0, 0.46, 0.02), new THREE.Vector3(0, 0, 0.02), new THREE.Vector3(0, -0.46, 0.02)]);

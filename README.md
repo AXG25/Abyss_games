@@ -1,4 +1,4 @@
-# 🎉 Party Play
+# 🎉 Abyss Games
 
 Mini juegos tipo *party game* (al estilo Mario Party) pensados 100 % para celular.
 Una persona crea una sala, comparte el código de 4 letras y hasta 4 jugadores

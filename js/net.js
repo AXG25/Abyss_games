@@ -41,7 +41,7 @@ const mkPeer = (peer, presence, isMe, updatedAt = Date.now()) => Object.freeze({
 });
 
 // ---------------------------------------------------------------- PeerJS
-const PREFIX = 'partyplay-axg25-';
+const PREFIX = 'abyssgames-axg25-';
 const PEER_OPTS = { debug: 0 };
 
 class PeerLobby {

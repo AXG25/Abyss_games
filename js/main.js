@@ -66,7 +66,7 @@ function renderHome() {
   app.innerHTML = `
     <section class="screen home">
       <header class="top"><span class="net wait">● Conectando…</span></header>
-      <div class="logo"><span>PARTY</span><span>PLAY</span><small>mini juegos para 4</small></div>
+      <div class="logo"><span>ABYSS</span><span>GAMES</span><small>mini juegos para 4</small></div>
       <div class="card">
         <label class="lbl">Tu nombre</label>
         <input id="name" maxlength="14" placeholder="¿Cómo te llamas?" value="${esc(S.name)}" autocomplete="off">

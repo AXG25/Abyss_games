@@ -324,3 +324,4 @@ input:focus { border-color: var(--yellow); }
 .duel-flash[hidden] { display: none; }
 .duel-me { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 5; font-family: var(--display); font-size: 34px; color: #ffd23f; text-shadow: 0 4px 0 rgba(0, 0, 0, 0.5); pointer-events: none; }
 .duel-top { white-space: normal; text-align: center; font-size: 17px; line-height: 1.2; width: max-content; max-width: 92%; }
+.k-msg.count { font-size: 90px; padding: 10px 40px; background: rgba(0, 0, 0, 0.45); color: var(--yellow); animation: pulse 0.5s ease-out; }

@@ -21,6 +21,8 @@ import { sfx, say, music, stopMusic, musicTempo } from './audio.js';
 import { avatarImage, rich } from './icons.js';
 
 export const DT = 1 / 60;
+// Cuenta regresiva antes de empezar (también la suma el anfitrión a la duración).
+export const PRESTART = 3000;
 export const TAU = Math.PI * 2;
 
 export function newPlayerBase(x, y, lives) {
@@ -262,12 +264,13 @@ export function mountRT(el, ctx, G) {
     clearTimeout(showMsg.t);
     if (ms) showMsg.t = setTimeout(() => { msg.hidden = true; }, ms);
   };
-  showMsg('¡Ya!', 900);
+
 
   let acc = 0;
   let simT = 0;
   let last = performance.now();
-  const mountAt = last;
+  const startAt = last + PRESTART;
+  let lastCount = -1;
   let prevT = 0;
   let tempoUp = false;
   const ents0 = () => [me, ...bots.map((b) => b.p), ...ext.remote || []];
@@ -279,7 +282,7 @@ export function mountRT(el, ctx, G) {
     near: (x, y) => Math.max(0.25, Math.min(1, 1.2 - Math.hypot(x - me.x, y - me.y) * 0.8)),
     st: {},
   };
-  if (G.music) music(G.music);
+  // (la música arranca con el ¡YA!)
   let lastPub = 0;
   let raf = 0;
   let finished = false;
@@ -300,10 +303,23 @@ export function mountRT(el, ctx, G) {
   const frame = (now) => {
     const dt = Math.min(0.5, (now - last) / 1000); // si el celular va lento, la simulación se pone al día
     last = now;
-    acc += dt;
+    // cuenta regresiva: nadie se mueve hasta el ¡YA!
+    const pre = now < startAt;
+    if (pre) {
+      acc = 0;
+      const n = Math.ceil((startAt - now) / 1000);
+      if (n !== lastCount) { lastCount = n; showMsg(String(n), 0); msg.classList.add('count'); sfx.count(); }
+    } else if (lastCount !== 0) {
+      lastCount = 0;
+      msg.classList.remove('count');
+      showMsg('¡YA!', 700);
+      sfx.go();
+      if (G.music) music(G.music);
+    }
+    if (!pre) acc += dt;
     // Si el reloj real ya llegó al final (celular muy lento), adelantar todo para no llegar tarde.
-    const wall = (now - mountAt) / 1000;
-    if (wall > simT + acc + 0.25) acc = wall - simT;
+    const wall = (now - startAt) / 1000;
+    if (!pre && wall > simT + acc + 0.25) acc = wall - simT;
     const others = remote();
     ext.remote = others;
     if (G.collectTaken) G.collectTaken(ext, others);
@@ -337,7 +353,8 @@ export function mountRT(el, ctx, G) {
       // fin anticipado: queda uno solo (lo decide el anfitrión)
       if (ctx.isHost && !overSent) {
         const alive = ext.all.filter((e) => !e.out).length;
-        if (alive === 0 || (G.endWhenOneLeft && players.length > 1 && alive <= 1)) { overSent = true; ext.over = true; setTimeout(() => ctx.endEarly && ctx.endEarly(), 300); }
+        // termina si cayeron todos, o si queda uno solo (con 2+ jugadores)
+        if (alive === 0 || (players.length > 1 && alive <= 1)) { overSent = true; ext.over = true; setTimeout(() => ctx.endEarly && ctx.endEarly(), 300); }
       }
       if (ext.over) break;
       simT += DT;

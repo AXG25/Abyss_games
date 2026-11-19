@@ -267,7 +267,7 @@ export function createView3D(board, G, W, opts = {}) {
   scene.add(sun);
 
   const particles = new Particles(scene);
-  const S = { THREE, scene, camera, renderer, W, objs: {}, t: 0, particles, emojiTexture, avatarTexture, std, makeHead: (id, r) => makeHead(THREE, id, r), makeGhost: (r) => makeGhost(THREE, r) };
+  const S = { THREE, scene, camera, renderer, W, objs: {}, t: 0, particles, makeWater, emojiTexture, avatarTexture, std, makeHead: (id, r) => makeHead(THREE, id, r), makeGhost: (r) => makeGhost(THREE, r) };
   let shakeAmt = 0;
   S.shake = (a) => { shakeAmt = Math.min(0.08, Math.max(shakeAmt, a)); };
   S.burst = (x, y, z, o) => particles.burst(x, y, z, o);
@@ -310,7 +310,8 @@ export function createView3D(board, G, W, opts = {}) {
     const vf = (camera.fov * Math.PI) / 360;
     const hf = Math.atan(Math.tan(vf) * camera.aspect);
     const need = cfg.camFit ?? 1.06;
-    const dist = Math.max(need / Math.tan(hf), (need * 0.95) / Math.tan(vf)) * 1.05;
+    const needZ = cfg.camFitZ ?? need * 0.95;
+    const dist = Math.max(need / Math.tan(hf), needZ / Math.tan(vf)) * 1.05;
     camBase.set(0, Math.sin(elev) * dist, Math.cos(elev) * dist + (cfg.camShift ?? 0.12));
     camera.updateProjectionMatrix();
     particles.mat.uniforms.uScale.value = renderer.domElement.height / (2 * Math.tan(vf));
@@ -320,6 +321,7 @@ export function createView3D(board, G, W, opts = {}) {
   ro.observe(board);
 
   let lastT = null;
+  let introClock = 0;
   const camDir = new THREE.Vector3();
   let wallLast = performance.now();
   const render = (t, ents, ext) => {
@@ -329,7 +331,8 @@ export function createView3D(board, G, W, opts = {}) {
     S.t = t;
     cfg.update(S, t, W, ext, ents, dt);
     // cámara
-    const intro = Math.min(1, t / 1.4);
+    introClock += dt;
+    const intro = Math.min(1, introClock / 2.6);
     const ease = 1 - Math.pow(1 - intro, 3);
     const ang = (1 - ease) * 0.9;
     const zoom = 1 + (1 - ease) * 0.6;
@@ -463,4 +466,84 @@ export function createView3D(board, G, W, opts = {}) {
   };
 
   return { render, dispose, S, burst: S.burst, shake: S.shake };
+}
+
+// ---------------------------------------------------------------- agua
+// Océano con olas animadas, reflejo del cielo, brillo del sol y espuma.
+// opts.foam = [rx, rz]: espuma alrededor de una forma ovalada (un barco).
+export function makeWater(opts = {}) {
+  const size = opts.size ?? 16;
+  const geo = new THREE.PlaneGeometry(size, size, 160, 160);
+  geo.rotateX(-Math.PI / 2);
+  const mat = new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uDeep: { value: new THREE.Color(opts.deep || '#04365c') },
+      uShallow: { value: new THREE.Color(opts.shallow || '#1b8fb5') },
+      uSky: { value: new THREE.Color(opts.sky || '#bfe6ff') },
+      uSun: { value: new THREE.Vector3(1.4, 3.2, 1.2).normalize() },
+      uFoam: { value: new THREE.Vector2(...(opts.foam || [0, 0])) },
+      uFoamZ: { value: opts.foamZ ?? 0 },
+      uAmp: { value: opts.amp ?? 1 },
+    },
+    vertexShader: `
+      uniform float uTime; uniform float uAmp;
+      varying vec3 vW; varying vec3 vN; varying float vH;
+      // olas: suma de senos en varias direcciones (con su derivada para la normal)
+      vec3 wave(vec2 p, vec2 d, float k, float a, float s) {
+        float f = dot(normalize(d), p) * k + uTime * s;
+        return vec3(a * sin(f), a * k * cos(f) * normalize(d));
+      }
+      void main() {
+        vec3 p = position;
+        vec2 q = p.xz;
+        vec3 w = wave(q, vec2(1.0, 0.3), 2.2, 0.035, 1.3)
+               + wave(q, vec2(-0.4, 1.0), 3.1, 0.022, 1.7)
+               + wave(q, vec2(0.7, -0.8), 5.3, 0.012, 2.3)
+               + wave(q, vec2(-1.0, -0.2), 8.0, 0.006, 3.1);
+        w *= uAmp;
+        p.y += w.x;
+        vH = w.x;
+        vN = normalize(vec3(-w.y, 1.0, -w.z));
+        vec4 wp = modelMatrix * vec4(p, 1.0);
+        vW = wp.xyz;
+        gl_Position = projectionMatrix * viewMatrix * wp;
+      }`,
+    fragmentShader: `
+      uniform float uTime; uniform vec3 uDeep; uniform vec3 uShallow; uniform vec3 uSky; uniform vec3 uSun; uniform vec2 uFoam; uniform float uFoamZ; uniform float uAmp;
+      varying vec3 vW; varying vec3 vN; varying float vH;
+      float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+      float noise(vec2 p) { vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+        return mix(mix(hash(i), hash(i + vec2(1, 0)), f.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), f.x), f.y); }
+      void main() {
+        // ondulaciones finas en la normal
+        vec2 r = vW.xz * 9.0;
+        vec3 n = normalize(vN + 0.12 * vec3(noise(r + uTime * 0.8) - 0.5, 0.0, noise(r.yx - uTime * 0.7) - 0.5));
+        vec3 v = normalize(cameraPosition - vW);
+        float fres = 0.04 + 0.96 * pow(1.0 - max(dot(n, v), 0.0), 4.0);
+        vec3 base = mix(uDeep, uShallow, clamp(vH * 12.0 + 0.45, 0.0, 1.0));
+        vec3 col = mix(base, uSky, fres * 0.8);
+        // brillo del sol
+        vec3 h = normalize(uSun + v);
+        col += vec3(1.0, 0.95, 0.85) * pow(max(dot(n, h), 0.0), 180.0) * 1.6;
+        // espuma en las crestas (suave)
+        float fn = noise(vW.xz * 6.0 + uTime * 0.5) * 0.6 + noise(vW.xz * 13.0 - uTime * 0.3) * 0.4;
+        float crest = smoothstep(0.04 * uAmp, 0.07 * uAmp, vH) * smoothstep(0.35, 0.8, fn);
+        // espuma alrededor del barco
+        float foam = 0.0;
+        if (uFoam.x > 0.0) {
+          float d = length(vec2(vW.x / uFoam.x, (vW.z - uFoamZ) / uFoam.y));
+          float band = smoothstep(1.22, 1.0, d) * smoothstep(0.94, 0.99, d);
+          float fn2 = noise(vW.xz * 7.0 + vec2(uTime * 0.6, -uTime * 0.4)) * 0.6 + noise(vW.xz * 15.0 - uTime * 0.5) * 0.4;
+          foam = band * smoothstep(0.3, 0.7, fn2) * 0.85;
+          foam += smoothstep(1.06, 1.0, d) * smoothstep(0.94, 0.99, d) * 0.5;
+        }
+        col = mix(col, vec3(0.95, 0.98, 1.0), clamp(crest * 0.7 + foam, 0.0, 1.0));
+        gl_FragColor = vec4(col, 1.0);
+        #include <colorspace_fragment>
+      }`,
+  });
+  const mesh = new THREE.Mesh(geo, mat);
+  mesh.update = (t) => { mat.uniforms.uTime.value = t; };
+  return mesh;
 }

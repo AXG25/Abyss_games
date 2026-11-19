@@ -111,7 +111,7 @@ export class Host {
     st.seed = Math.floor(Math.random() * 2 ** 31);
     st.rk = [];
     const game = GAME_BY_ID[st.g];
-    this.go('intro', INTRO_MS, () => this.go('play', game.dur(st.seed) + GRACE_MS, () => this.collect()));
+    this.go('intro', INTRO_MS, () => this.go('play', game.dur(st.seed) + (game.realtime ? 3000 : 0) + GRACE_MS, () => this.collect()));
   }
 
   go(ph, ms, next) {

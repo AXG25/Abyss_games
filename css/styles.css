@@ -14,11 +14,11 @@
 }
 
 * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-/* Fondo: el degradado va en <body>, que mide como mínimo toda la pantalla (incluida
-   la zona de las barras del navegador) y crece con el contenido, así cubre toda la
-   página sin depender de capas fijas (Safari del iPhone las recorta). Debajo, en
-   <html>, un color del mismo tono por si el navegador estira la página al rebotar. */
-html { margin: 0; min-height: 100%; background: #2a2360; }
+/* Fondo: el degradado va en <body>, que mide como mínimo toda la pantalla y crece
+   con el contenido. Sin "rebote" al llegar al final de la página: en el iPhone ese
+   rebote dejaba ver una franja de color plano debajo del degradado. Por si algún
+   navegador igual rebota, el color plano es del mismo tono que el final del degradado. */
+html { margin: 0; min-height: 100%; background: #2c3268; overscroll-behavior: none; }
 body {
   margin: 0;
   min-height: 100vh;
@@ -30,7 +30,7 @@ body {
     radial-gradient(circle at 15% 10%, rgba(255, 77, 109, 0.35), transparent 40%),
     radial-gradient(circle at 90% 30%, rgba(58, 134, 255, 0.35), transparent 45%),
     radial-gradient(circle at 50% 100%, rgba(6, 214, 160, 0.25), transparent 50%),
-    linear-gradient(160deg, var(--bg1), var(--bg2)) var(--bg1);
+    linear-gradient(160deg, var(--bg1), var(--bg2)) #2c3268;
   overscroll-behavior: none;
   user-select: none;
   -webkit-user-select: none;

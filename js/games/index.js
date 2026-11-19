@@ -6,6 +6,7 @@ import reflex from './reflex.js';
 import count from './count.js';
 import memory from './memory.js';
 import stopwatch from './stopwatch.js';
+import kraken from './kraken.js';
 
-export const GAMES = [tap, reflex, count, memory, stopwatch];
+export const GAMES = [kraken, tap, reflex, count, memory, stopwatch];
 export const GAME_BY_ID = Object.fromEntries(GAMES.map((g) => [g.id, g]));

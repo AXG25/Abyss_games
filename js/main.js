@@ -1,4 +1,4 @@
-import { connectLobby } from './net.js';
+import { connectLobby, LocalRoom } from './net.js';
 import { Host, findHost, MAX_PLAYERS } from './engine.js';
 import { GAMES, GAME_BY_ID } from './games/index.js';
 import { esc, $, $$, beep, buzz, fanfare, store, toast, COLORS, AVATARS } from './util.js';
@@ -16,7 +16,8 @@ const S = {
   host: null,           // instancia Host si este teléfono es anfitrión
   creating: false,
   jt: 0,
-  me: null,             // mi `peer`
+  me: getUid(),         // mi id de jugador (estable aunque me reconecte)
+  peer: null,           // mi `peer` en la sala actual
   lastSt: null,
   lastHostSeen: 0,
   screenKey: '',
@@ -26,12 +27,19 @@ const S = {
   unsubs: [],
 };
 
+function getUid() {
+  try {
+    let u = sessionStorage.getItem('pp_uid');
+    if (!u) { u = 'u' + Math.random().toString(36).slice(2, 10); sessionStorage.setItem('pp_uid', u); }
+    return u;
+  } catch { return 'u' + Math.random().toString(36).slice(2, 10); }
+}
+
 // ---------------------------------------------------------------- arranque
 boot();
 async function boot() {
   renderHome();
   S.lobby = await connectLobby();
-  S.online = !!S.lobby.__real;
   S.lobby.onPeers(() => { if (!S.nr) renderOpenRooms(); });
   if (S.lobby.onConnection) S.lobby.onConnection(() => updateNetPill());
   updateNetPill();
@@ -41,10 +49,11 @@ async function boot() {
 function updateNetPill() {
   const pill = $('.net');
   if (!pill) return;
-  const real = S.lobby && S.lobby.__real;
-  const on = real && S.lobby.connected();
-  pill.className = 'net ' + (on ? 'on' : real ? 'wait' : 'off');
-  pill.textContent = on ? '● En línea' : real ? '● Conectando…' : '● Modo práctica';
+  const src = S.nr || S.lobby;
+  const kind = src ? src.kind : 'wait';
+  const on = kind !== 'local' && src && src.connected();
+  pill.className = 'net ' + (on ? 'on' : kind === 'local' ? 'off' : 'wait');
+  pill.textContent = on ? '● En línea' : kind === 'local' ? '● Modo práctica' : '● Conectando…';
 }
 
 // ---------------------------------------------------------------- inicio
@@ -110,8 +119,10 @@ function renderOpenRooms() {
   const box = $('.open-rooms');
   if (!box || !S.lobby) return;
   const hint = $('#hint');
-  if (!S.lobby.__real) {
-    if (hint) hint.textContent = 'Sin conexión en tiempo real: puedes crear una sala y probar los juegos con bots.';
+  if (S.lobby.kind !== 'claude') {
+    if (hint) hint.textContent = S.lobby.kind === 'p2p'
+      ? 'Crea una sala y comparte el código de 4 letras con tus amigos para que se unan desde su celular.'
+      : 'Sin conexión en tiempo real: puedes crear una sala y probar los juegos con bots.';
     box.innerHTML = '';
     return;
   }
@@ -142,11 +153,16 @@ async function enterRoom(code, creating) {
   try {
     S.nr = await S.lobby.join('pg-' + code.toLowerCase());
   } catch (e) {
-    toast('No se pudo entrar a la sala');
-    return renderHome();
+    if (!creating) {
+      toast('No se pudo conectar a la sala 😕 Revisa tu internet e intenta otra vez', 3500);
+      return renderHome();
+    }
+    toast('Sin conexión: modo práctica con bots', 3500);
+    S.nr = new LocalRoom('pg-' + code.toLowerCase());
   }
+  if (S.nr.onConnection) S.unsubs.push(S.nr.onConnection(() => updateNetPill()));
   try { history.replaceState(null, '', '#' + code); } catch { /* sin hash */ }
-  await S.nr.presence({ name: S.name, av: S.av, jt: S.jt }).catch(() => {});
+  await S.nr.presence({ name: S.name, av: S.av, jt: S.jt, uid: S.me }).catch(() => {});
   S.unsubs.push(S.nr.onPeers(() => onRoomChange()));
   if (creating) becomeHost(null);
   S.watch = setInterval(checkHost, 1000);
@@ -154,8 +170,8 @@ async function enterRoom(code, creating) {
 
 function myPeer() {
   const me = S.nr && S.nr.peers().find((p) => p.sameTab);
-  if (me) S.me = me.peer;
-  return S.me;
+  if (me) S.peer = me.peer;
+  return S.peer;
 }
 
 function becomeHost(prev) {
@@ -174,7 +190,7 @@ function dropHost() {
 }
 
 function advertise() {
-  if (!S.host || !S.lobby.__real) return;
+  if (!S.host || S.lobby.kind !== 'claude') return;
   const st = S.host.st;
   S.lobby.presence({ open: { c: S.code, n: st.pl.filter((p) => !p.b).length, h: S.name, ph: st.ph } }).catch(() => {});
 }
@@ -260,7 +276,8 @@ function renderRoomLobby(st) {
   S.screenKey = 'lobby';
   S.lobbySig = sig;
   stopGame();
-  const hostId = isHost ? S.me : findHost(S.nr.peers())?.peer;
+  const hp = findHost(S.nr.peers());
+  const hostId = isHost ? S.me : hp && (hp.presence.uid || hp.peer);
   const inGame = st.pl.some((p) => p.id === S.me);
   const slots = [];
   for (let i = 0; i < MAX_PLAYERS; i++) {
@@ -363,7 +380,15 @@ function renderPlay(st) {
   const ctx = {
     seed: st.seed,
     color: colorOf(st, S.me),
+    me: S.me,
+    isHost: !!S.host,
+    players: st.pl.map((p) => ({ ...p, c: colorOf(st, p.id) })),
     submit: (v) => { S.nr && S.nr.presence({ in: { k, v } }).catch(() => {}); },
+    // Tiempo real: mi estado en vivo y el de los demás.
+    live: (v) => { S.nr && S.nr.presence({ lv: { k, ...v } }).catch(() => {}); },
+    others: () => (S.nr ? S.nr.peers() : [])
+      .filter((p) => !p.sameTab && p.presence && p.presence.lv && p.presence.lv.k === k)
+      .map((p) => ({ id: typeof p.presence.uid === 'string' ? p.presence.uid : p.peer, lv: p.presence.lv })),
   };
   try {
     S.unmountGame = g.mount(stage, ctx) || null;

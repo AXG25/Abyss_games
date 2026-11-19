@@ -5,6 +5,9 @@ import { GAMES, GAME_BY_ID } from './games/index.js';
 import { mulberry32, shuffle, BOT_NAMES, BOT_AVATARS } from './util.js';
 
 export const MAX_PLAYERS = 4;
+// Id del jugador: el `uid` que cada teléfono pone en su presence (estable si se
+// reconecta); si no hay, el `peer`.
+const pid = (p) => (typeof p.presence?.uid === 'string' ? p.presence.uid.slice(0, 40) : p.peer);
 const INTRO_MS = 4500;
 const GRACE_MS = 1500;
 const RESULTS_MS = 6000;
@@ -32,8 +35,14 @@ export class Host {
   }
 
   humans() {
-    return this.nr.peers()
-      .filter((p) => p.kind === 'viewer' && p.presence && typeof p.presence.name === 'string')
+    // Un mismo jugador puede aparecer dos veces un momento si se reconecta: nos quedamos con el más reciente.
+    const byId = new Map();
+    for (const p of this.nr.peers()) {
+      if (p.kind !== 'viewer' || !p.presence || typeof p.presence.name !== 'string') continue;
+      const prev = byId.get(pid(p));
+      if (!prev || p.isMe || (!prev.isMe && p.updatedAt > prev.updatedAt)) byId.set(pid(p), p);
+    }
+    return [...byId.values()]
       .sort((a, b) => (Number(a.presence.jt) || 0) - (Number(b.presence.jt) || 0) || (a.peer < b.peer ? -1 : 1));
   }
 
@@ -46,7 +55,7 @@ export class Host {
       for (const h of hs) {
         if (pl.length >= MAX_PLAYERS) break;
         pl.push({
-          id: h.peer,
+          id: pid(h),
           n: String(h.presence.name).slice(0, 14),
           a: String(h.presence.av || '🙂').slice(0, 8),
           s: old[h.peer]?.s || 0,
@@ -59,7 +68,7 @@ export class Host {
       }
       st.pl = pl;
     } else {
-      const here = new Set(hs.map((h) => h.peer));
+      const here = new Set(hs.map(pid));
       st.pl.forEach((p) => { if (!p.b) p.off = here.has(p.id) ? 0 : 1; });
     }
     this.publish();
@@ -115,12 +124,12 @@ export class Host {
   collect() {
     const st = this.st;
     const game = GAME_BY_ID[st.g];
-    const byPeer = Object.fromEntries(this.nr.peers().map((p) => [p.peer, p]));
+    const byPeer = Object.fromEntries(this.nr.peers().map((p) => [pid(p), p]));
     const playKey = st.k;
     const r = mulberry32(st.seed ^ 0x5bd1e995);
     const res = st.pl.map((p) => {
       let v = null;
-      if (p.b) v = game.bot(r, st.seed);
+      if (p.b) v = game.bot(r, st.seed, p);
       else {
         const inp = byPeer[p.id]?.presence?.in;
         if (inp && inp.k === playKey) v = inp.v;

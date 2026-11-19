@@ -125,6 +125,53 @@ export const G = {
   },
   hud: (p) => (p.out ? '👻' : '⛸️'),
 
+  PR,
+  scene3d: {
+    sky: '#cdeffd',
+    camFit: 1.15,
+    hemiGround: '#03045e',
+    hideOut: true,
+    sinkDepth: 0.5,
+    setup(S) {
+      const { THREE, scene } = S;
+      const water = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshStandardMaterial({ color: '#023e8a', roughness: 0.2, metalness: 0.2 }));
+      water.rotation.x = -Math.PI / 2;
+      water.position.y = -0.18;
+      water.receiveShadow = true;
+      scene.add(water);
+      const geo = new THREE.BoxGeometry(TS * 0.94, 0.1, TS * 0.94);
+      S.objs.blocks = [];
+      for (let k = 0; k < N * N; k++) {
+        if (!VALID[k]) { S.objs.blocks.push(null); continue; }
+        const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: '#caf0f8', roughness: 0.15, metalness: 0.05, transparent: true, opacity: 0.95 }));
+        const [x, y] = center(k);
+        m.position.set(x, -0.05, y);
+        m.receiveShadow = true;
+        m.castShadow = true;
+        scene.add(m);
+        S.objs.blocks.push(m);
+      }
+    },
+    update(S, t, W, ext) {
+      const tiles = (ext && ext.tiles) || new Map();
+      const now = ext && ext.t !== undefined ? ext.t : t;
+      S.objs.blocks.forEach((m, k) => {
+        if (!m) return;
+        const st = tiles.get(k);
+        const age = st === undefined ? -1 : now - st;
+        const [x, y] = center(k);
+        if (age < 0) { m.position.set(x, -0.05, y); m.material.color.set('#caf0f8'); m.material.opacity = 0.95; m.visible = true; return; }
+        if (age > CRACK + 0.6) { m.visible = false; return; }
+        const sh = age < CRACK ? Math.sin(t * 60 + k) * 0.006 * (age / CRACK) : 0;
+        const sink = age > CRACK ? (age - CRACK) * 0.6 : 0;
+        m.position.set(x + sh, -0.05 - sink, y);
+        const k2 = Math.min(1, age / CRACK);
+        m.material.color.setRGB(0.79 - 0.35 * k2, 0.94 - 0.25 * k2, 0.97 - 0.1 * k2);
+        m.material.opacity = age > CRACK ? Math.max(0, 0.95 - (age - CRACK) * 1.6) : 0.95;
+      });
+    },
+  },
+
   draw(g, v, t, W, ents, meId, ext) {
     const { size } = v;
     const tiles = (ext && ext.tiles) || new Map();

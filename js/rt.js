@@ -105,6 +105,12 @@ export function drawPlayer(g, v, e, meId, t) {
   g.globalAlpha = 1;
 }
 
+// Preferencia del jugador: forzar 2D (por si su celular va lento en 3D).
+export const USE_2D = () => { try { return localStorage.getItem('pp_2d') === '1'; } catch { return false; } };
+
+// Precarga el motor 3D (se llama en la pantalla de instrucciones).
+export function preload3D() { if (!USE_2D()) import('./rt3d.js').catch(() => {}); }
+
 const SOUNDS = {
   act: () => beep(520, 0.08, 'triangle'),
   hit: () => { beep(150, 0.25, 'sawtooth', 0.08); buzz(150); },
@@ -119,7 +125,7 @@ export function mountRT(el, ctx, G) {
   el.innerHTML = `
     <div class="g-kraken">
       <div class="k-hud"><span class="k-lives"></span><span class="k-time">${G.TOTAL}</span><span class="k-alive"></span></div>
-      <div class="k-board"><canvas></canvas><div class="k-msg" hidden></div><div class="k-banner" hidden></div></div>
+      <div class="k-board"><canvas></canvas><div class="k-top" hidden></div><div class="k-msg" hidden></div><div class="k-banner" hidden></div></div>
       <div class="k-ctrl">
         <div class="k-joy"><div class="k-knob"></div></div>
         ${G.action ? `<button class="k-jump" style="--c:${ctx.color}">${G.action}</button>` : '<div class="k-tip">Muévete con el joystick</div>'}
@@ -133,6 +139,7 @@ export function mountRT(el, ctx, G) {
   const aliveEl = el.querySelector('.k-alive');
   const msg = el.querySelector('.k-msg');
   const banner = el.querySelector('.k-banner');
+  const topEl = el.querySelector('.k-top');
   const joy = el.querySelector('.k-joy');
   const knob = el.querySelector('.k-knob');
   const actBtn = el.querySelector('.k-jump');
@@ -155,6 +162,19 @@ export function mountRT(el, ctx, G) {
   ro.observe(board);
 
   const W = G.world(ctx.seed);
+
+  // Vista 3D (si el juego la tiene y el celular soporta WebGL); si no, 2D.
+  let v3 = null;
+  let dead = false;
+  if (G.scene3d && !USE_2D()) {
+    import('./rt3d.js').then((m) => {
+      if (dead || !m.webglOK()) return;
+      try {
+        v3 = m.createView3D(board, G, W);
+        canvas.style.display = 'none';
+      } catch (e) { console.warn('3D no disponible', e); v3 = null; }
+    }).catch((e) => console.warn('3D no disponible', e));
+  }
   const players = ctx.players;
   const myIdx = Math.max(0, players.findIndex((p) => p.id === ctx.me));
   const me = G.spawn(myIdx, W);
@@ -238,6 +258,7 @@ export function mountRT(el, ctx, G) {
   let acc = 0;
   let simT = 0;
   let last = performance.now();
+  const mountAt = last;
   let lastPub = 0;
   let raf = 0;
   let finished = false;
@@ -256,9 +277,12 @@ export function mountRT(el, ctx, G) {
   const r3 = (v) => Math.round(v * 1000) / 1000;
 
   const frame = (now) => {
-    const dt = Math.min(0.1, (now - last) / 1000);
+    const dt = Math.min(0.5, (now - last) / 1000); // si el celular va lento, la simulación se pone al día
     last = now;
     acc += dt;
+    // Si el reloj real ya llegó al final (celular muy lento), adelantar todo para no llegar tarde.
+    const wall = (now - mountAt) / 1000;
+    if (wall > simT + acc + 0.25) acc = wall - simT;
     const others = remote();
     ext.remote = others;
     if (G.collectTaken) G.collectTaken(ext, others);
@@ -325,7 +349,10 @@ export function mountRT(el, ctx, G) {
     ents.push({ id: ctx.me, ...me, e: G.pack ? G.pack(me) : null, c: ctx.color, a: avOf[ctx.me] || '🙂' });
     ents.sort((a, b) => (a.z || 0) - (b.z || 0));
     const tDraw = Math.min(simT, G.TOTAL - DT);
-    G.draw(g, view, tDraw, W, ents, ctx.me, ext);
+    if (v3) v3.render(tDraw, ents, ext, ctx.me);
+    else G.draw(g, view, tDraw, W, ents, ctx.me, ext);
+    const top = G.topText ? G.topText(tDraw, W, ext) : null;
+    if ((top || '') !== (topEl.textContent || '') || !!top === topEl.hidden) { topEl.hidden = !top; topEl.textContent = top || ''; topEl.classList.toggle('danger', !!(top && top.danger)); }
     livesEl.textContent = G.hud ? G.hud(me) : me.out ? '👻' : '❤️'.repeat(Math.max(0, me.h)) + '🖤'.repeat(Math.max(0, G.lives - me.h));
     timeEl.textContent = Math.max(0, Math.ceil(G.TOTAL - simT));
     aliveEl.textContent = G.hudRight ? G.hudRight(ents) : `🧍 ${ents.filter((e) => !e.out).length}`;
@@ -341,6 +368,8 @@ export function mountRT(el, ctx, G) {
   raf = requestAnimationFrame(frame);
 
   return () => {
+    dead = true;
+    if (v3) { try { v3.dispose(); } catch { /* nada */ } }
     cancelAnimationFrame(raf);
     ro.disconnect();
     removeEventListener('keydown', kd);

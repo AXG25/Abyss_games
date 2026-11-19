@@ -120,6 +120,92 @@ const G = {
   hud: (p) => (p.out ? '👻' : '🙂'),
   hudRight: (ents) => `🧍 ${ents.filter((e) => !e.out).length}`,
 
+  PR,
+  topText(t, W, ext) {
+    const hs = ext && ext.hs;
+    if (!hs || hs.fx === undefined || hs.done) return null;
+    const now = ext.t ?? t;
+    if (now < hs.st) return '¡Prepárate!';
+    return `💣 ${Math.max(0, hs.fx - now).toFixed(1)}`;
+  },
+  scene3d: {
+    sky: '#3c1642',
+    camFit: 1.3,
+    camElev: 62,
+    hemiGround: '#240046',
+    setup(S) {
+      const { THREE, scene } = S;
+      const tex = (() => {
+        const c = document.createElement('canvas');
+        c.width = c.height = 256;
+        const g = c.getContext('2d');
+        for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { g.fillStyle = (i + j) % 2 ? '#ffd6a5' : '#ffadad'; g.fillRect(i * 32, j * 32, 32, 32); }
+        const t = new THREE.CanvasTexture(c);
+        t.colorSpace = THREE.SRGBColorSpace;
+        return t;
+      })();
+      const side = new THREE.MeshStandardMaterial({ color: '#9d4edd' });
+      const floor = new THREE.Mesh(new THREE.BoxGeometry(HALF * 2, 0.2, HALF * 2), [side, side, new THREE.MeshStandardMaterial({ map: tex, roughness: 0.7 }), side, side, side]);
+      floor.position.y = -0.1;
+      floor.receiveShadow = true;
+      scene.add(floor);
+      const wallMat = new THREE.MeshStandardMaterial({ color: '#7b2cbf' });
+      for (const [w, d, x, z] of [[HALF * 2 + 0.1, 0.05, 0, -HALF - 0.025], [HALF * 2 + 0.1, 0.05, 0, HALF + 0.025], [0.05, HALF * 2, -HALF - 0.025, 0], [0.05, HALF * 2, HALF + 0.025, 0]]) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.1, d), wallMat);
+        m.position.set(x, 0.05, z);
+        m.castShadow = true;
+        scene.add(m);
+      }
+      // la bomba
+      const bomb = new THREE.Group();
+      const body = new THREE.Mesh(new THREE.SphereGeometry(0.06, 20, 16), new THREE.MeshStandardMaterial({ color: '#111', roughness: 0.3, metalness: 0.5 }));
+      body.castShadow = true;
+      bomb.add(body);
+      const fuse = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.04, 6), new THREE.MeshStandardMaterial({ color: '#8d6e63' }));
+      fuse.position.set(0.02, 0.065, 0);
+      fuse.rotation.z = -0.5;
+      bomb.add(fuse);
+      const spark = new THREE.Mesh(new THREE.SphereGeometry(0.016, 8, 6), new THREE.MeshBasicMaterial({ color: '#ffbe0b' }));
+      spark.position.set(0.035, 0.09, 0);
+      bomb.add(spark);
+      bomb.visible = false;
+      scene.add(bomb);
+      const boom = new THREE.Mesh(new THREE.SphereGeometry(1, 20, 14), new THREE.MeshBasicMaterial({ color: '#ffbe0b', transparent: true, depthWrite: false }));
+      boom.visible = false;
+      scene.add(boom);
+      Object.assign(S.objs, { bomb, body, spark, boom });
+    },
+    update(S, t, W, ext, ents) {
+      const o = S.objs;
+      const hs = (ext && ext.hs) || {};
+      const now = ext && ext.t !== undefined ? ext.t : t;
+      const holder = !hs.done && ents.find((e) => e.id === hs.h && !e.out);
+      o.bomb.visible = !!holder && now >= (hs.st || 0) - 1.5;
+      if (holder) {
+        const rem = Math.max(0, (hs.fx || 0) - now);
+        const shake = Math.sin(t * (10 + (12 - Math.min(12, rem)) * 3)) * 0.012;
+        o.bomb.position.set(holder.x + shake, PR * 1.3 * 5.2 + (holder.z || 0) * 0.22, holder.y);
+        o.spark.visible = Math.floor(t * 20) % 2 === 0;
+        o.spark.material.color.set(rem < 3 ? '#ff006e' : '#ffbe0b');
+        o.body.material.emissive.set(rem < 3 && Math.floor(t * 8) % 2 ? '#550000' : '#000000');
+      }
+      o.boom.visible = false;
+      if (hs.outs) {
+        for (const [id, ms] of Object.entries(hs.outs)) {
+          const dt = now - ms / 1000;
+          if (dt < 0 || dt > 0.6) continue;
+          const e = ents.find((x) => x.id === id);
+          if (!e) continue;
+          o.boom.visible = true;
+          o.boom.position.set(e.x, 0.1, e.y);
+          o.boom.scale.setScalar(0.1 + dt * 0.7);
+          o.boom.material.opacity = 1 - dt / 0.6;
+          o.boom.material.color.set(dt < 0.15 ? '#fff3b0' : '#ff7b00');
+        }
+      }
+    },
+  },
+
   draw(g, v, t, W, ents, meId, ext) {
     const { size } = v;
     const hs = (ext && ext.hs) || {};
@@ -159,16 +245,6 @@ const G = {
         gr.addColorStop(0, `rgba(255,255,200,${1 - dt / 0.6})`); gr.addColorStop(1, 'rgba(255,0,110,0)');
         g.beginPath(); g.arc(v.X(e.x), v.Y(e.y), rr, 0, TAU); g.fillStyle = gr; g.fill();
       }
-    }
-    // mecha
-    if (hs.fx !== undefined && !hs.done) {
-      const pausa = (ext.t || t) < hs.st;
-      g.font = `bold ${Math.round(size * 0.07)}px system-ui`;
-      g.textAlign = 'center'; g.textBaseline = 'top';
-      g.fillStyle = rem < 3 ? '#ff006e' : '#fff';
-      g.strokeStyle = 'rgba(0,0,0,0.5)'; g.lineWidth = 4;
-      const txt = pausa ? '¡Prepárate!' : `💣 ${rem.toFixed(1)}`;
-      g.strokeText(txt, size / 2, 6); g.fillText(txt, size / 2, 6);
     }
   },
 };

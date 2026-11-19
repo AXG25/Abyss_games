@@ -37,6 +37,14 @@ Puntos por ronda: 1.º 3⭐ · 2.º 2⭐ · 3.º 1⭐ · 4.º 0⭐.
 - **Modo local**: fuera de Claude se usa `BroadcastChannel`, así que varias
   pestañas del mismo navegador pueden jugar entre sí.
 
+## 3D
+
+Los juegos en tiempo real se dibujan en 3D con Three.js (`vendor/three.module.min.js`,
+r160) a través de `js/rt3d.js`. Cada juego define su escenario en `G.scene3d`
+(`setup` y `update`); los personajes, la cámara, las luces y las sombras los
+pone `rt3d.js`. Si el celular no soporta WebGL (o el jugador elige "Gráficos:
+2D" en el inicio), se usa la versión 2D (`G.draw`).
+
 ## Juegos en tiempo real
 
 `js/rt.js` es la base: joystick, botón de acción, bucle a 60 pasos/s, envío de

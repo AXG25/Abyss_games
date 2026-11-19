@@ -1,6 +1,7 @@
 import { connectLobby, LocalRoom } from './net.js';
 import { Host, findHost, MAX_PLAYERS } from './engine.js';
 import { GAMES, GAME_BY_ID } from './games/index.js';
+import { preload3D } from './rt.js';
 import { esc, $, $$, beep, buzz, fanfare, store, toast, COLORS, AVATARS } from './util.js';
 
 const app = document.getElementById('app');
@@ -75,6 +76,7 @@ function renderHome() {
         <input id="code" maxlength="4" placeholder="CÓDIGO" value="${esc(hashCode.toUpperCase())}" autocomplete="off" autocapitalize="characters">
         <button class="btn" id="join">Unirse</button>
       </div>
+      <button class="btn ghost sm gfx" id="gfx"></button>
       <div class="open-rooms"></div>
       <p class="hint" id="hint"></p>
     </section>`;
@@ -88,6 +90,11 @@ function renderHome() {
     $$('.av').forEach((x) => x.classList.toggle('sel', x === b));
     beep(600, 0.05, 'triangle');
   });
+  const gfx = $('#gfx');
+  const is2D = () => { try { return localStorage.getItem('pp_2d') === '1'; } catch { return false; } };
+  const paintGfx = () => { gfx.textContent = is2D() ? '🎮 Gráficos: 2D (toca para 3D)' : '🎮 Gráficos: 3D (toca para 2D si va lento)'; };
+  paintGfx();
+  gfx.addEventListener('click', () => { try { localStorage.setItem('pp_2d', is2D() ? '0' : '1'); } catch { /* nada */ } paintGfx(); });
   $('#code').addEventListener('input', (e) => { e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, ''); });
   $('#create').addEventListener('click', () => {
     if (!checkName()) return;
@@ -351,6 +358,7 @@ function renderIntro(st) {
       <div class="intro-players">${st.pl.map((p) => playerChip(st, p)).join('')}</div>
     </section>`;
   beep(440, 0.1, 'triangle');
+  if (g.realtime) preload3D();
   const cd = $('.count-down');
   const start = Date.now();
   const t = setInterval(() => {

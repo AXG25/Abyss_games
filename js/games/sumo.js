@@ -127,6 +127,68 @@ const G = {
     return o;
   },
 
+  PR,
+  scene3d: {
+    sky: '#4cc9f0',
+    hemiGround: '#7209b7',
+    camElev: 50,
+    setup(S) {
+      const { THREE, scene } = S;
+      const top = new THREE.MeshStandardMaterial({ color: '#ffb3c6', roughness: 0.5 });
+      const side = new THREE.MeshStandardMaterial({ color: '#fb6f92', roughness: 0.6 });
+      const plat = new THREE.Mesh(new THREE.CylinderGeometry(1, 0.75, 0.22, 64), [side, top, side]);
+      plat.position.y = -0.11;
+      plat.receiveShadow = true;
+      plat.castShadow = true;
+      scene.add(plat);
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.012, 8, 64), new THREE.MeshBasicMaterial({ color: '#fb6f92' }));
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 0.003;
+      scene.add(ring);
+      const column = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.12, 2.5, 24), side);
+      column.position.y = -1.45;
+      scene.add(column);
+      S.objs.plat = plat;
+      S.objs.ring = ring;
+      // nubes
+      const cloudMat = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 1 });
+      const cg = new THREE.SphereGeometry(1, 12, 10);
+      S.objs.clouds = Array.from({ length: 7 }, (_, i) => {
+        const grp = new THREE.Group();
+        for (let k = 0; k < 4; k++) {
+          const m = new THREE.Mesh(cg, cloudMat);
+          m.scale.set(0.25 + (k % 2) * 0.1, 0.14, 0.2);
+          m.position.set(k * 0.18 - 0.27, (k % 2) * 0.05, 0);
+          grp.add(m);
+        }
+        grp.position.set(-3 + i * 1.1, -0.9 - (i % 3) * 0.4, -1.5 + ((i * 1.7) % 3));
+        scene.add(grp);
+        return grp;
+      });
+      S.objs.aura = new Map();
+      S.objs.auraGeo = new THREE.SphereGeometry(1, 16, 12);
+    },
+    update(S, t, W, ext, ents) {
+      const { THREE, scene } = S;
+      const o = S.objs;
+      const R = radiusAt(t);
+      o.plat.scale.set(R, 1, R);
+      o.ring.scale.set(R, R, 1);
+      o.clouds.forEach((c, i) => { c.position.x = ((-3 + i * 1.1 + t * 0.12) % 4.5) - 1; });
+      for (const e of ents) {
+        let a = o.aura.get(e.id);
+        if (!a) {
+          a = new THREE.Mesh(o.auraGeo, new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0.35, depthWrite: false }));
+          scene.add(a);
+          o.aura.set(e.id, a);
+        }
+        const pushing = !e.out && (e.push > 0 || (e.e && e.e.p));
+        a.visible = !!pushing;
+        if (pushing) { a.position.set(e.x, PR * 1.6, e.y); a.scale.setScalar(PR * 2.2); }
+      }
+    },
+  },
+
   draw(g, v, t, W, ents, meId) {
     const { size, c, R } = v;
     const sky = g.createLinearGradient(0, 0, 0, size);

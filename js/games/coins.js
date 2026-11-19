@@ -92,6 +92,75 @@ const G = {
   },
   endText: (p) => `🪙 ¡${p.s} monedas!`,
 
+  PR,
+  scene3d: {
+    sky: '#a8e6cf',
+    camFit: 1.3,
+    camElev: 62,
+    hemiGround: '#2d6a4f',
+    setup(S) {
+      const { THREE, scene } = S;
+      const c = document.createElement('canvas');
+      c.width = c.height = 256;
+      const g = c.getContext('2d');
+      for (let i = 0; i < 8; i++) for (let j = 0; j < 8; j++) { g.fillStyle = (i + j) % 2 ? '#52b788' : '#5fc495'; g.fillRect(i * 32, j * 32, 32, 32); }
+      const tex = new THREE.CanvasTexture(c);
+      tex.colorSpace = THREE.SRGBColorSpace;
+      const ground = new THREE.Mesh(new THREE.BoxGeometry(HALF * 2, 0.2, HALF * 2), [
+        new THREE.MeshStandardMaterial({ color: '#40916c' }), new THREE.MeshStandardMaterial({ color: '#40916c' }),
+        new THREE.MeshStandardMaterial({ map: tex, roughness: 0.9 }), new THREE.MeshStandardMaterial({ color: '#40916c' }),
+        new THREE.MeshStandardMaterial({ color: '#40916c' }), new THREE.MeshStandardMaterial({ color: '#40916c' }),
+      ]);
+      ground.position.y = -0.1;
+      ground.receiveShadow = true;
+      scene.add(ground);
+      const wallMat = new THREE.MeshStandardMaterial({ color: '#1b4332' });
+      for (const [w, d, x, z] of [[HALF * 2 + 0.08, 0.04, 0, -HALF - 0.02], [HALF * 2 + 0.08, 0.04, 0, HALF + 0.02], [0.04, HALF * 2, -HALF - 0.02, 0], [0.04, HALF * 2, HALF + 0.02, 0]]) {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, 0.08, d), wallMat);
+        m.position.set(x, 0.04, z);
+        m.castShadow = true;
+        scene.add(m);
+      }
+      const island = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 0.1, 48), new THREE.MeshStandardMaterial({ color: '#95d5b2' }));
+      island.position.y = -0.25;
+      scene.add(island);
+      S.objs.coinGeo = new THREE.CylinderGeometry(CR * 1.35, CR * 1.35, 0.02, 24);
+      S.objs.coinGeo.rotateX(Math.PI / 2);
+      S.objs.coinMat = new THREE.MeshStandardMaterial({ color: '#ffd60a', metalness: 0.15, roughness: 0.3, emissive: '#c99700', emissiveIntensity: 0.55 });
+      S.objs.bigMat = new THREE.MeshStandardMaterial({ color: '#ffb703', metalness: 0.15, roughness: 0.3, emissive: '#d17a00', emissiveIntensity: 0.6 });
+      S.objs.live = new Map();
+    },
+    update(S, t, W, ext, ents) {
+      const { THREE, scene } = S;
+      const o = S.objs;
+      const keep = new Set();
+      for (const c of W.coins) {
+        if (c.t0 > t) break;
+        const age = t - c.t0;
+        if (age > LIFE) continue;
+        let gone = ext && ext.taken.has(c.id);
+        if (!gone) for (const e of ents) if (e.gs && e.gs.has(c.id)) { gone = true; break; }
+        if (gone) continue;
+        keep.add(c.id);
+        let m = o.live.get(c.id);
+        if (!m) {
+          m = new THREE.Mesh(o.coinGeo, c.v > 1 ? o.bigMat : o.coinMat);
+          m.castShadow = true;
+          if (c.v > 1) m.scale.setScalar(1.7);
+          scene.add(m);
+          o.live.set(c.id, m);
+        }
+        const pop = Math.min(1, age / 0.25) * (c.v > 1 ? 1.7 : 1);
+        m.scale.setScalar(pop);
+        m.position.set(c.x, CR * 1.35 * pop + 0.02 + Math.sin(t * 3 + c.id) * 0.01, c.y);
+        m.rotation.y = t * 3 + c.id;
+        m.visible = !(age > LIFE - 1.2 && Math.floor(t * 10) % 2);
+      }
+      for (const [id, m] of o.live) if (!keep.has(id)) { scene.remove(m); o.live.delete(id); }
+    },
+    tag: (e) => String((e.e && e.e.s) ?? e.s ?? 0),
+  },
+
   draw(g, v, t, W, ents, meId, ext) {
     const { size } = v;
     g.fillStyle = '#2d6a4f';

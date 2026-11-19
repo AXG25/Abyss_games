@@ -106,6 +106,110 @@ const G = {
 
   result: (p) => ({ h: Math.max(0, p.h), t: p.out ? Math.round(p.tOut * 1000) : TOTAL * 1000 }),
 
+  PR,
+  scene3d: {
+    sky: '#3d0c11',
+    hemiSky: '#ffd0a0',
+    hemiGround: '#5a0a0a',
+    setup(S) {
+      const { THREE, scene } = S;
+      const lc = document.createElement('canvas');
+      lc.width = lc.height = 256;
+      const lg = lc.getContext('2d');
+      lg.fillStyle = '#b22a00'; lg.fillRect(0, 0, 256, 256);
+      for (let i = 0; i < 70; i++) {
+        const x = (i * 97) % 256, y = (i * 61) % 256, r = 10 + (i * 13) % 30;
+        const gr = lg.createRadialGradient(x, y, 0, x, y, r);
+        gr.addColorStop(0, i % 3 ? '#ffb703' : '#ff7b00'); gr.addColorStop(1, 'rgba(178,42,0,0)');
+        lg.fillStyle = gr; lg.beginPath(); lg.arc(x, y, r, 0, Math.PI * 2); lg.fill();
+      }
+      const ltex = new THREE.CanvasTexture(lc);
+      ltex.colorSpace = THREE.SRGBColorSpace;
+      ltex.wrapS = ltex.wrapT = THREE.RepeatWrapping;
+      ltex.repeat.set(4, 4);
+      S.objs.ltex = ltex;
+      const lava = new THREE.Mesh(new THREE.PlaneGeometry(14, 14), new THREE.MeshStandardMaterial({ map: ltex, emissive: '#ff3c00', emissiveMap: ltex, emissiveIntensity: 0.9, roughness: 0.9 }));
+      lava.rotation.x = -Math.PI / 2;
+      lava.position.y = -0.55;
+      scene.add(lava);
+      S.objs.lava = lava;
+      const plat = new THREE.Mesh(new THREE.CylinderGeometry(ARENA, ARENA * 0.8, 0.5, 64), [
+        new THREE.MeshStandardMaterial({ color: '#5c677d', roughness: 0.9 }),
+        new THREE.MeshStandardMaterial({ color: '#8d99ae', roughness: 0.85 }),
+        new THREE.MeshStandardMaterial({ color: '#5c677d' }),
+      ]);
+      plat.position.y = -0.25;
+      plat.receiveShadow = true;
+      scene.add(plat);
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(ARENA, 0.03, 8, 64), new THREE.MeshStandardMaterial({ color: '#4a4e69' }));
+      rim.rotation.x = Math.PI / 2;
+      rim.position.y = 0.005;
+      scene.add(rim);
+      S.objs.bombGeo = new THREE.SphereGeometry(0.055, 18, 14);
+      S.objs.bombMat = new THREE.MeshStandardMaterial({ color: '#1b1b1b', roughness: 0.3, metalness: 0.4 });
+      S.objs.fuseMat = new THREE.MeshBasicMaterial({ color: '#ffbe0b' });
+      S.objs.warnGeo = new THREE.CircleGeometry(1, 40);
+      S.objs.boomGeo = new THREE.SphereGeometry(1, 20, 14);
+      S.objs.live = new Map();
+    },
+    update(S, t, W) {
+      const { THREE, scene } = S;
+      const o = S.objs;
+      o.lava.material.emissiveIntensity = 0.8 + Math.sin(t * 2) * 0.15;
+      o.ltex.offset.set(t * 0.02, t * 0.013);
+      const keep = new Set();
+      for (const b of W.bombs) {
+        if (b.t0 > t) break;
+        if (t > b.te + BOOM) continue;
+        keep.add(b.id);
+        let m = o.live.get(b.id);
+        if (!m) {
+          const bomb = new THREE.Group();
+          const body = new THREE.Mesh(o.bombGeo, o.bombMat);
+          body.castShadow = true;
+          bomb.add(body);
+          const spark = new THREE.Mesh(new THREE.SphereGeometry(0.015, 8, 6), o.fuseMat);
+          spark.position.set(0.02, 0.065, 0);
+          bomb.add(spark);
+          const warn = new THREE.Mesh(o.warnGeo, new THREE.MeshBasicMaterial({ color: '#e63946', transparent: true, opacity: 0.2, depthWrite: false }));
+          warn.rotation.x = -Math.PI / 2;
+          warn.position.set(b.x, 0.004, b.y);
+          warn.scale.setScalar(b.r);
+          const boom = new THREE.Mesh(o.boomGeo, new THREE.MeshBasicMaterial({ color: '#ffbe0b', transparent: true, opacity: 0.9, depthWrite: false }));
+          boom.visible = false;
+          boom.position.set(b.x, 0.02, b.y);
+          scene.add(bomb, warn, boom);
+          m = { bomb, warn, boom, spark };
+          o.live.set(b.id, m);
+        }
+        if (t < b.te) {
+          const k = (t - b.t0) / FUSE;
+          m.bomb.visible = true;
+          m.bomb.position.set(b.x, 0.055 + (1 - k) * (1 - k) * 2.6, b.y);
+          m.bomb.rotation.z = t * 3;
+          m.spark.visible = Math.floor(t * 20) % 2 === 0;
+          m.warn.material.opacity = 0.15 + 0.4 * k;
+          m.boom.visible = false;
+        } else {
+          const k = (t - b.te) / BOOM;
+          m.bomb.visible = false;
+          m.warn.visible = false;
+          m.boom.visible = true;
+          m.boom.scale.setScalar(b.r * (0.6 + k * 0.6));
+          m.boom.material.color.set(k < 0.3 ? '#fff3b0' : '#ff7b00');
+          m.boom.material.opacity = 0.9 * (1 - k);
+        }
+      }
+      for (const [id, m] of o.live) {
+        if (keep.has(id)) continue;
+        scene.remove(m.bomb, m.warn, m.boom);
+        m.warn.material.dispose(); m.boom.material.dispose();
+        m.spark.geometry.dispose();
+        o.live.delete(id);
+      }
+    },
+  },
+
   draw(g, v, t, W, ents, meId) {
     const { size, c, R } = v;
     g.fillStyle = '#1d3557';

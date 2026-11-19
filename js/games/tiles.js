@@ -128,6 +128,68 @@ const G = {
     return { text: t < rd.drop ? `¡${col.n}! ${Math.ceil(rd.drop - t)}` : `¡${col.n}!`, color: col.c };
   },
 
+  PR,
+  scene3d: {
+    sky: '#90e0ef',
+    camFit: 1.25,
+    camElev: 62,
+    hemiGround: '#023e8a',
+    setup(S) {
+      const { THREE, scene } = S;
+      const water = new THREE.Mesh(new THREE.PlaneGeometry(14, 14, 40, 40), new THREE.MeshStandardMaterial({ color: '#0077b6', roughness: 0.25, flatShading: true }));
+      water.geometry.rotateX(-Math.PI / 2);
+      water.position.y = -0.45;
+      water.receiveShadow = true;
+      scene.add(water);
+      S.objs.water = water;
+      S.objs.wBase = Float32Array.from(water.geometry.attributes.position.array);
+      const geo = new THREE.BoxGeometry(TS * 0.93, 0.14, TS * 0.93);
+      S.objs.mats = COLORS.map((c) => new THREE.MeshStandardMaterial({ color: c.c, roughness: 0.4 }));
+      S.objs.tiles = Array.from({ length: N * N }, (_, k) => {
+        const m = new THREE.Mesh(geo, S.objs.mats[0]);
+        const [x, y] = center(k);
+        m.position.set(x, -0.07, y);
+        m.receiveShadow = true;
+        m.castShadow = true;
+        scene.add(m);
+        return m;
+      });
+      // marco para los buenos
+      const edges = new THREE.EdgesGeometry(new THREE.BoxGeometry(TS * 0.95, 0.15, TS * 0.95));
+      S.objs.glow = Array.from({ length: N * N }, (_, k) => {
+        const l = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({ color: '#ffffff' }));
+        l.position.copy(S.objs.tiles[k].position);
+        scene.add(l);
+        return l;
+      });
+    },
+    update(S, t, W) {
+      const o = S.objs;
+      const pos = o.water.geometry.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = o.wBase[i * 3], z = o.wBase[i * 3 + 2];
+        pos.array[i * 3 + 1] = Math.sin(x * 2 + t * 1.5) * 0.035 + Math.cos(z * 2.4 + t) * 0.035;
+      }
+      pos.needsUpdate = true;
+      const rd = roundAt(W, t) || W.rounds[0];
+      const dropT = t - rd.drop;
+      for (let k = 0; k < N * N; k++) {
+        const m = o.tiles[k];
+        const good = rd.cols[k] === rd.c;
+        m.material = o.mats[rd.cols[k]];
+        const [x, y] = center(k);
+        let yy = -0.07, dx = 0, dz = 0;
+        if (!good && dropT < 0 && dropT > -1) { dx = Math.sin(t * 60 + k) * 0.01; dz = Math.cos(t * 50 + k) * 0.01; }
+        if (!good && dropT >= 0 && dropT < DROP) yy = -0.07 - Math.min(1.5, dropT * dropT * 6);
+        if (!good && dropT >= DROP) yy = -0.07 - Math.max(0, 1.5 - (dropT - DROP) * 6);
+        m.position.set(x + dx, yy, y + dz);
+        o.glow[k].visible = good && dropT < DROP;
+        o.glow[k].position.copy(m.position);
+        o.glow[k].scale.setScalar(1 + 0.03 * Math.sin(t * 10));
+      }
+    },
+  },
+
   draw(g, v, t, W, ents, meId) {
     const { size } = v;
     // agua abajo

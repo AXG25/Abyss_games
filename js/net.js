@@ -42,7 +42,18 @@ const mkPeer = (peer, presence, isMe, updatedAt = Date.now()) => Object.freeze({
 
 // ---------------------------------------------------------------- PeerJS
 const PREFIX = 'abyssgames-axg25-';
-const PEER_OPTS = { debug: 0 };
+// STUN de Google + TURN gratis de PeerJS (por si los teléfonos están en redes
+// distintas, p. ej. uno en WiFi y otro con datos).
+const PEER_OPTS = {
+  debug: 0,
+  config: {
+    iceServers: [
+      { urls: ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'] },
+      { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' },
+    ],
+    sdpSemantics: 'unified-plan',
+  },
+};
 
 class PeerLobby {
   constructor() {
@@ -60,17 +71,18 @@ class PeerLobby {
   peers() { return this._snap; }
   async presence() {}
   onPeers() { return () => {}; }
-  async join(name) {
-    const r = new PeerRoom(name);
-    await r._connect();
+  async join(name, opts = {}) {
+    const r = new PeerRoom(name, opts);
+    try { await r._connect(opts.create ? 'any' : 'join'); } catch (e) { r._closed = true; throw e; }
     return r;
   }
 }
 
 class PeerRoom {
-  constructor(name) {
+  constructor(name, opts = {}) {
     this.name = name;
     this.kind = 'p2p';
+    this.onStatus = opts.onStatus || (() => {});
     this.hubId = PREFIX + name;
     this.role = null;          // 'hub' | 'client'
     this.myId = 'yo';
@@ -86,16 +98,44 @@ class PeerRoom {
   }
 
   // Intenta ser el hub; si ya existe, se conecta a él.
-  async _connect() {
+  // mode 'join': quien se une por código NUNCA crea la sala; solo busca al hub
+  // durante ~30 s (así no queda cada uno en una sala vacía distinta).
+  async _connect(mode = 'any') {
     let lastErr = null;
+    if (mode === 'join') {
+      const deadline = Date.now() + 30000;
+      for (let n = 1; !this._closed && Date.now() < deadline; n++) {
+        this.onStatus(n === 1 ? 'Buscando la sala…' : lastErr && lastErr.type === 'peer-unavailable'
+          ? `No aparece la sala, reintentando (${n})…` : `Conectando con la sala, intento ${n}…`);
+        try { await this._tryClient(); this._watchVisibility(); return; } catch (e) { lastErr = e; await sleep(1500); }
+      }
+      throw lastErr || { type: 'timeout' };
+    }
     for (let attempt = 0; attempt < 4 && !this._closed; attempt++) {
-      try { await this._tryHub(); return; } catch (e) {
+      try { await this._tryHub(); this._watchVisibility(); return; } catch (e) {
         lastErr = e;
         if (e && e.type !== 'unavailable-id') { await sleep(700); continue; }
       }
-      try { await this._tryClient(); return; } catch (e) { lastErr = e; await sleep(700); }
+      try { await this._tryClient(); this._watchVisibility(); return; } catch (e) { lastErr = e; await sleep(700); }
     }
     throw lastErr || new Error('sin conexión');
+  }
+
+  // iPhone: al cambiar de app (p. ej. para mandar el código por WhatsApp)
+  // Safari congela la página. Al volver, revisamos y reconectamos.
+  _watchVisibility() {
+    if (this._vis) return;
+    this._vis = () => {
+      if (document.visibilityState !== 'visible' || this._closed) return;
+      const p = this.peer;
+      if (this.role === 'hub' && p && !p.destroyed && p.disconnected) { try { p.reconnect(); } catch { /* nada */ } }
+      if (this.role === 'client' && (!this.conn || !this.conn.open)) this._lost();
+      if (this.role === 'client') this._sendPresence();
+      if (this.role === 'hub') this._broadcast();
+    };
+    document.addEventListener('visibilitychange', this._vis);
+    addEventListener('pageshow', this._vis);
+    addEventListener('online', this._vis);
   }
 
   _tryHub() {
@@ -148,9 +188,17 @@ class PeerRoom {
       conn.on('error', drop);
     });
     p.on('disconnected', () => { try { if (!p.destroyed) p.reconnect(); } catch { /* nada */ } });
-    p.on('error', () => {});
+    p.on('error', (e) => {
+      // otro teléfono se quedó con la sala mientras estábamos fuera: nos unimos a él
+      if (e && e.type === 'unavailable-id' && this.peer === p) this._lost();
+    });
     clearInterval(this._hb);
     this._hb = setInterval(() => {
+      // sin servidor de señalización nadie nuevo puede entrar: reintentar
+      if (p.disconnected && !p.destroyed && document.visibilityState === 'visible' && Date.now() - (this._rt || 0) > 3000) {
+        this._rt = Date.now();
+        try { p.reconnect(); } catch { /* nada */ }
+      }
       for (const [id, m] of this._members) {
         if (Date.now() - m.seen > 6000) { try { m.conn.close(); } catch { /* nada */ } this._members.delete(id); this._changed(); }
       }
@@ -272,6 +320,7 @@ class PeerRoom {
   async leave() {
     this._closed = true;
     clearInterval(this._hb);
+    if (this._vis) { document.removeEventListener('visibilitychange', this._vis); removeEventListener('pageshow', this._vis); removeEventListener('online', this._vis); }
     this._subs.clear();
     this._conSubs.clear();
     try { this.peer && this.peer.destroy(); } catch { /* nada */ }

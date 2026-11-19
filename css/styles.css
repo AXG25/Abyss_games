@@ -436,3 +436,15 @@ input:focus { border-color: var(--yellow); }
 @keyframes cqBump { 50% { transform: translateX(-50%) scale(1.3); } }
 .cq-opts.min { grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .cq-opts.min button { font-size: 26px; padding: 8px 0; animation: none; }
+
+/* --- conexión --- */
+.joining small.join-st { min-height: 18px; opacity: 0.75; font-size: 14px; margin: 4px 0 14px; }
+.join-err { gap: 10px; text-align: center; padding: 0 22px; }
+.join-err > svg { width: 64px; height: 64px; }
+.join-err h2 { font-family: var(--display); font-size: 28px; margin: 0; }
+.join-err p { font-size: 16px; line-height: 1.4; margin: 0 0 4px; }
+.join-err small { opacity: 0.5; font-size: 12px; margin-bottom: 8px; }
+.code-box .share { margin-top: 8px; display: inline-flex; align-items: center; gap: 6px; }
+.code-box .share svg { width: 20px; height: 20px; }
+.keep-open { display: flex; align-items: center; justify-content: center; gap: 6px; font-size: 13px; }
+.keep-open svg { width: 18px; height: 18px; flex: none; }

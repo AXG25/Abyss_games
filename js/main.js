@@ -158,14 +158,19 @@ async function enterRoom(code, creating) {
   S.lastHostSeen = Date.now();
   S.screenKey = '';
   S.lobbySig = '';
-  app.innerHTML = `<section class="screen center"><div class="spinner"></div><p>Entrando a la sala <b>${esc(code)}</b>…</p></section>`;
+  app.innerHTML = `<section class="screen center joining"><div class="spinner"></div><p>${creating ? 'Creando' : 'Entrando a'} la sala <b>${esc(code)}</b>…</p><small class="join-st"></small><button class="btn ghost sm" id="cancelJoin">Cancelar</button></section>`;
+  const myTry = (S.joinTry = (S.joinTry || 0) + 1);
+  $('#cancelJoin').onclick = () => { S.joinTry++; renderHome(); };
   try {
-    S.nr = await S.lobby.join('pg-' + code.toLowerCase());
+    const nr = await S.lobby.join('pg-' + code.toLowerCase(), {
+      create: creating,
+      onStatus: (m) => { const el = $('.join-st'); if (el && S.joinTry === myTry) el.textContent = m; },
+    });
+    if (S.joinTry !== myTry) { nr.leave?.(); return; } // canceló mientras conectaba
+    S.nr = nr;
   } catch (e) {
-    if (!creating) {
-      toast('No se pudo conectar a la sala. Revisa tu internet e intenta otra vez', 3500);
-      return renderHome();
-    }
+    if (S.joinTry !== myTry) return;
+    if (!creating) return renderJoinError(code, e);
     toast('Sin conexión: modo práctica con bots', 3500);
     S.nr = new LocalRoom('pg-' + code.toLowerCase());
   }
@@ -175,6 +180,26 @@ async function enterRoom(code, creating) {
   S.unsubs.push(S.nr.onPeers(() => onRoomChange()));
   if (creating) becomeHost(null);
   S.watch = setInterval(checkHost, 1000);
+}
+
+function renderJoinError(code, e) {
+  const t = (e && e.type) || '';
+  const why = t === 'peer-unavailable'
+    ? `No encontramos la sala <b>${esc(code)}</b>. Revisa el código y que quien la creó tenga la página <b>abierta en pantalla</b> (si cambió de app, que vuelva a abrirla).`
+    : /network|server-error|socket/.test(t)
+      ? 'No hay conexión con el servidor de salas. Revisa tu internet e intenta otra vez.'
+      : `La sala <b>${esc(code)}</b> existe pero no logramos conectar los teléfonos. Que el creador tenga la página abierta y prueben de nuevo; si sigue fallando, conéctense los dos a la misma red WiFi.`;
+  app.innerHTML = `
+    <section class="screen center join-err">
+      ${icon('warn')}
+      <h2>No pudimos entrar</h2>
+      <p>${why}</p>
+      <small>Detalle: ${esc(t || 'sin respuesta')}</small>
+      <button class="btn big primary" id="retry">Intentar otra vez</button>
+      <button class="btn ghost" id="back">Volver</button>
+    </section>`;
+  $('#retry').onclick = () => enterRoom(code, false);
+  $('#back').onclick = () => renderHome();
 }
 
 function myPeer() {
@@ -310,7 +335,9 @@ function renderRoomLobby(st) {
         <small>Código de la sala</small>
         <button class="code" id="copy">${esc(S.code)}</button>
         <small>Toca para copiar y compártelo</small>
+        ${S.lobby && S.lobby.kind === 'p2p' ? `<button class="btn sm share" id="share">${icon('people')} Invitar con enlace</button>` : ''}
       </div>
+      ${S.lobby && S.lobby.kind === 'p2p' && isHost && st.ph === 'lobby' ? `<p class="hint keep-open">${icon('warn')} Deja esta pantalla abierta mientras tus amigos entran.</p>` : ''}
       <div class="slots">${slots.join('')}</div>
       ${!inGame ? `<p class="hint">${icon('eye')} La sala está llena: estás mirando</p>` : ''}
       ${isHost ? `
@@ -333,6 +360,13 @@ function renderRoomLobby(st) {
     </section>`;
   updateNetPill();
   $('#leave').onclick = leaveRoom;
+  if ($('#share')) $('#share').onclick = async () => {
+    const url = location.origin + location.pathname + '#' + S.code;
+    try {
+      if (navigator.share) await navigator.share({ title: 'Abyss Games', text: `¡Únete a mi sala ${S.code} en Abyss Games!`, url });
+      else { await navigator.clipboard.writeText(url); toast('Enlace copiado'); }
+    } catch { /* canceló */ }
+  };
   $('#copy').onclick = () => {
     try { navigator.clipboard.writeText(S.code).then(() => toast('Código copiado'), () => toast('Código: ' + S.code)); } catch { toast('Código: ' + S.code); }
   };

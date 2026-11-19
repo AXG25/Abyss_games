@@ -662,6 +662,48 @@ input:focus { border-color: var(--yellow); }
 .oc-hand .pc.nope { animation: ocNope .3s; }
 .oc-actions { display: flex; justify-content: center; min-height: 10px; }
 
+/* Ocho loco: historial de jugadas, avisos sobre la mesa, poder de las cartas y reglas */
+.oc-hist { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 2px; min-height: 50px; font-size: 12px; line-height: 1.25; color: var(--muted); text-align: center; }
+.oc-hist p { margin: 0; opacity: .6; display: flex; align-items: center; gap: 5px; }
+.oc-hist p:last-child { opacity: 1; color: #fff; font-size: 13px; }
+.oc-hist p b { color: var(--yellow); font-weight: 900; }
+.oc-hist i { flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--c); }
+.oc-banner {
+  position: absolute; left: 50%; top: 50%; z-index: 3; pointer-events: none; white-space: nowrap;
+  display: flex; align-items: center; gap: 6px; padding: 8px 16px; border-radius: 16px;
+  background: rgba(20, 10, 45, .9); border: 3px solid var(--c, #fff);
+  font-family: var(--display); font-size: clamp(18px, 5.6vw, 23px); color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.45);
+  box-shadow: 0 0 20px color-mix(in srgb, var(--c, #fff) 55%, transparent), 0 8px 18px rgba(0,0,0,.4);
+  animation: bannerIn 1.6s ease-out forwards;
+}
+.oc-banner .sv { width: 24px; height: 24px; display: block; fill: currentColor; }
+.oc-banner .red { color: #ff6b81; }
+.oc-banner .blk { color: #fff; }
+.oc-dir.spin { animation: ocSpin .6s ease-out; }
+@keyframes ocSpin { from { transform: rotate(-360deg) scale(1.6); } }
+.pc-pow { position: absolute; left: 4px; bottom: 4px; padding: 1px 5px; border-radius: 6px; font-size: 9px; font-weight: 900; line-height: 1.35; letter-spacing: .3px; text-transform: uppercase; color: #fff; background: #3b1466; }
+.pc.red .pc-pow { background: #d90429; }
+.oc-help-btn { font-family: var(--display); font-size: 18px; }
+.oc-pick-box.oc-rules { text-align: left; max-height: 82vh; overflow-y: auto; }
+/* con el botón de reglas el título no cabe en dos palabras grandes */
+.ocho .oc-title { font-size: 19px; white-space: nowrap; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ocho .oc-top .btn { flex: none; white-space: nowrap; }
+.ocho .oc-tools { gap: 4px; }
+.ocho .oc-end-btn { padding: 6px 8px; font-size: 12px; }
+@media (max-width: 360px) { .ocho .oc-title { font-size: 16px; } }
+.oc-rules h3 { margin: 0; font-family: var(--display); font-weight: 400; font-size: 22px; text-align: center; }
+.oc-rules h4 { margin: 2px 0 0; font-family: var(--display); font-weight: 400; font-size: 18px; color: var(--yellow); }
+.oc-rules ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 7px; font-size: 14px; font-weight: 700; line-height: 1.35; }
+.oc-rules .oc-goal { margin: 0; text-align: center; font-size: 15px; }
+.oc-pow { display: flex; flex-direction: column; gap: 10px; }
+.oc-pow > div { display: flex; align-items: center; gap: 12px; }
+.oc-pow p { margin: 0; font-size: 13px; font-weight: 700; line-height: 1.35; color: var(--muted); }
+.oc-pow p b { display: block; font-family: var(--display); font-weight: 400; font-size: 17px; color: #fff; }
+.oc-mini { flex: none; position: relative; width: 40px; height: 56px; }
+.oc-mini .pc { position: absolute; top: 0; left: 0; transform: scale(.625); transform-origin: top left; }
+.oc-why { margin: 0; padding: 8px 10px; border-radius: 12px; background: rgba(255,255,255,.07); font-size: 13px; font-weight: 700; line-height: 1.35; color: var(--muted); }
+.oc-why b { color: #fff; }
+
 /* carta de póker */
 .pc {
   position: relative; width: 64px; height: 90px; border-radius: 9px; background: #fff; color: #1b1035;
@@ -816,7 +858,7 @@ input:focus { border-color: var(--yellow); }
   padding: 8px 18px; border-radius: 16px; background: rgba(20, 10, 45, .9); border: 3px solid var(--c, #fff);
   font-family: var(--display); font-size: clamp(18px, 5.6vw, 25px); color: #fff; text-shadow: 0 2px 0 rgba(0,0,0,.45);
   box-shadow: 0 0 22px color-mix(in srgb, var(--c, #fff) 60%, transparent), 0 8px 18px rgba(0,0,0,.4);
-  animation: pqBanner 1.4s ease-out forwards;
+  animation: bannerIn 1.4s ease-out forwards;
 }
 
 /* dados: cubos 3D de CSS que se lanzan y caen en el número */
@@ -871,7 +913,7 @@ input:focus { border-color: var(--yellow); }
 @keyframes pqPop { from { transform: scale(.4); opacity: 0; } }
 @keyframes pqBurst { from { transform: scale(.3); opacity: 1; } to { transform: scale(1.8); opacity: 0; } }
 @keyframes pqSpark { to { transform: translate(var(--dx), var(--dy)) scale(.2); opacity: 0; } }
-@keyframes pqBanner {
+@keyframes bannerIn {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(.5); }
   14% { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
   24% { transform: translate(-50%, -50%) scale(1); }

@@ -17,6 +17,9 @@ compiten ronda tras ronda por estrellas ⭐.
 | 💣 | Lluvia de bombas *(tiempo real)* | Esquivar las bombas por su sombra; 3 vidas |
 | 🟩 | Pisa el color *(tiempo real)* | Pararse en el color anunciado antes de que el piso se caiga |
 | 🪙 | Fiebre de monedas *(tiempo real)* | Recoger más monedas en 30 s |
+| 🥊 | Empujones *(tiempo real)* | Tirar a los demás de una plataforma que se encoge |
+| 💥 | Bomba caliente *(tiempo real)* | Pasar la bomba antes de que explote; gana el último en pie |
+| 🧊 | Hielo frágil *(tiempo real)* | El hielo que pisas se hunde; gana el último en pie |
 
 Puntos por ronda: 1.º 3⭐ · 2.º 2⭐ · 3.º 1⭐ · 4.º 0⭐.
 
@@ -40,6 +43,10 @@ Puntos por ronda: 1.º 3⭐ · 2.º 2⭐ · 3.º 1⭐ · 4.º 0⭐.
 la posición ~15 veces/s y bots simulados por el anfitrión. Un juego nuevo solo
 describe su mundo (`world`), su física (`step`), su IA de bot (`brain`) y cómo
 se dibuja (`draw`). Mira `js/games/bombs.js` como ejemplo.
+
+Para juegos con interacción entre jugadores: `ext.all` trae a todos los
+jugadores; `hostInit`/`hostTick`/`applyHost` permiten que el anfitrión haga de
+árbitro (ver `hotbomb.js`); `endWhenOneLeft` termina la ronda cuando queda uno.
 
 ## Agregar un mini juego
 

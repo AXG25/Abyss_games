@@ -384,6 +384,7 @@ function renderPlay(st) {
     isHost: !!S.host,
     players: st.pl.map((p) => ({ ...p, c: colorOf(st, p.id) })),
     submit: (v) => { S.nr && S.nr.presence({ in: { k, v } }).catch(() => {}); },
+    endEarly: S.host ? () => S.host && S.host.endPlayEarly() : null,
     // Tiempo real: mi estado en vivo y el de los demás.
     live: (v) => { S.nr && S.nr.presence({ lv: { k, ...v } }).catch(() => {}); },
     others: () => (S.nr ? S.nr.peers() : [])

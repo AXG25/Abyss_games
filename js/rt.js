@@ -52,12 +52,25 @@ export function clampBox(p, m) {
   p.y = Math.max(-m, Math.min(m, p.y));
 }
 
+// Resultados de bots calculados en vivo por el anfitrión (cuando los bots
+// interactúan con humanos, la simulación aislada no basta).
+const LIVE_BOT = new Map();
+
 export function simulateBot(G, seed, idx) {
+  const live = LIVE_BOT.get(seed + ':' + idx);
+  if (live) return live;
   const W = G.world(seed);
   const p = G.spawn(idx + 1, W);
   const brain = G.brain(seed, idx, W);
   const n = Math.floor(G.TOTAL / DT);
-  for (let i = 0; i < n && !p.out; i++) G.step(p, brain(p, i * DT), i * DT, W, null);
+  const ext = G.newExt ? G.newExt() : { taken: new Set() };
+  p.id = 'bot' + idx;
+  for (let i = 0; i < n && !p.out; i++) {
+    const t = i * DT;
+    ext.t = t;
+    ext.all = [p];
+    G.step(p, brain(p, t, ext), t, W, ext);
+  }
   return G.result(p);
 }
 
@@ -99,6 +112,7 @@ const SOUNDS = {
   coin: () => beep(1320, 0.07, 'square', 0.05),
   big: () => { beep(988, 0.08, 'square', 0.06); setTimeout(() => beep(1568, 0.12, 'square', 0.06), 80); },
   fall: () => { beep(400, 0.4, 'sine', 0.08); buzz(200); },
+  got: () => { beep(220, 0.15, 'square', 0.07); buzz(120); },
 };
 
 export function mountRT(el, ctx, G) {
@@ -144,10 +158,13 @@ export function mountRT(el, ctx, G) {
   const players = ctx.players;
   const myIdx = Math.max(0, players.findIndex((p) => p.id === ctx.me));
   const me = G.spawn(myIdx, W);
+  me.id = ctx.me;
   const bots = ctx.isHost
     ? players.filter((p) => p.b).map((p) => {
       const bi = Number(String(p.id).slice(3)) || 0;
-      return { id: p.id, p: G.spawn(bi + 1, W), brain: G.brain(ctx.seed, bi, W) };
+      const bp = G.spawn(bi + 1, W);
+      bp.id = p.id;
+      return { id: p.id, bi, p: bp, brain: G.brain(ctx.seed, bi, W) };
     })
     : [];
 
@@ -198,6 +215,8 @@ export function mountRT(el, ctx, G) {
     const out = [];
     for (const { id, lv } of ctx.others()) {
       if (!lv || !colorOf[id]) continue;
+      if (lv.hs && typeof lv.hs === 'object' && !ctx.isHost) ext.hs = lv.hs;
+      if (lv.over) ext.over = true;
       out.push({ id, x: +lv.x || 0, y: +lv.y || 0, z: +lv.z || 0, h: lv.h, out: !!lv.out, inv: lv.inv, e: lv.e });
       if (Array.isArray(lv.b)) {
         for (const b of lv.b) {
@@ -224,7 +243,11 @@ export function mountRT(el, ctx, G) {
   let finished = false;
   let submitted = false;
   let lastBanner = '';
-  const ext = { taken: new Set() };
+  const ext = G.newExt ? G.newExt() : { taken: new Set() };
+  ext.all = [];
+  if (ctx.isHost && G.hostInit) ext.hs = G.hostInit(W, players);
+  let overSent = false;
+  const saveBot = (b) => { LIVE_BOT.set(ctx.seed + ':' + b.bi, G.result(b.p)); };
   const submit = () => {
     if (submitted) return;
     submitted = true;
@@ -239,7 +262,11 @@ export function mountRT(el, ctx, G) {
     const others = remote();
     ext.remote = others;
     if (G.collectTaken) G.collectTaken(ext, others);
-    while (acc >= DT && simT < G.TOTAL) {
+    if (G.sync) G.sync(ext, others, simT);
+    ext.all = [me, ...bots.map((b) => b.p), ...others];
+    while (acc >= DT && simT < G.TOTAL && !finished) {
+      ext.t = simT;
+      if (ctx.isHost && G.hostTick) G.hostTick(ext.hs, simT, W, ext.all, players);
       let ix = inp.x, iy = inp.y;
       if (keys.size) {
         ix = (keys.has('ArrowRight') || keys.has('d') ? 1 : 0) - (keys.has('ArrowLeft') || keys.has('a') ? 1 : 0);
@@ -248,21 +275,40 @@ export function mountRT(el, ctx, G) {
       const ev = G.step(me, { x: ix, y: iy }, simT, W, ext);
       if (ev && SOUNDS[ev]) SOUNDS[ev]();
       if (ev === 'hit') showMsg('¡Ay! 💥', 700);
-      if (ev === 'fall') showMsg('¡Al agua! 🌊', 900);
+      if (ev === 'fall') showMsg(G.fallText || '¡Al agua! 🌊', 900);
+      if (ev === 'got') showMsg('💣 ¡Tienes la bomba!', 900);
       if (ev === 'out') { showMsg('👻 ¡Eliminado!', 0); submit(); }
-      for (const b of bots) G.step(b.p, b.brain(b.p, simT), simT, W, null);
+      for (const b of bots) {
+        const wasOut = b.p.out;
+        G.step(b.p, b.brain(b.p, simT, ext), simT, W, ext);
+        if (b.p.out && !wasOut) saveBot(b);
+      }
+      if (G.applyHost && ext.hs) {
+        const e2 = G.applyHost(me, ext.hs, simT);
+        if (e2 === 'out') { SOUNDS.out(); showMsg('👻 ¡Eliminado!', 0); submit(); }
+        for (const b of bots) { const w = b.p.out; G.applyHost(b.p, ext.hs, simT); if (b.p.out && !w) saveBot(b); }
+      }
+      // fin anticipado: queda uno solo (lo decide el anfitrión)
+      if (ctx.isHost && G.endWhenOneLeft && !overSent && players.length > 1) {
+        const alive = ext.all.filter((e) => !e.out).length;
+        if (alive <= 1) { overSent = true; ext.over = true; setTimeout(() => ctx.endEarly && ctx.endEarly(), 300); }
+      }
+      if (ext.over) break;
       simT += DT;
       acc -= DT;
     }
-    if (simT >= G.TOTAL && !finished) {
+    if ((simT >= G.TOTAL || ext.over) && !finished) {
       finished = true;
-      if (!me.out) { showMsg(G.endText ? G.endText(me) : '🎉 ¡Sobreviviste!', 0); beep(880, 0.2, 'triangle'); }
+      if (!me.out) { showMsg(G.endText ? G.endText(me) : ext.over ? '🏆 ¡Quedaste en pie!' : '🎉 ¡Sobreviviste!', 0); beep(880, 0.2, 'triangle'); }
+      for (const b of bots) saveBot(b);
       submit();
     }
     if (now - lastPub > 66) {
       lastPub = now;
       const lv = { x: r3(me.x), y: r3(me.y), z: r3(me.z || 0), h: me.h, out: me.out ? 1 : 0, inv: me.inv > 0 ? 1 : 0 };
       if (G.pack) lv.e = G.pack(me);
+      if (ctx.isHost && ext.hs) lv.hs = ext.hs;
+      if (ctx.isHost && ext.over) lv.over = 1;
       if (bots.length) lv.b = bots.map((b) => [b.id, r3(b.p.x), r3(b.p.y), r3(b.p.z || 0), b.p.h, b.p.out ? 1 : 0, b.p.inv > 0 ? 1 : 0, G.pack ? G.pack(b.p) : null]);
       ctx.live(lv);
     }

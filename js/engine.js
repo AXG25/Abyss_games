@@ -153,6 +153,14 @@ export class Host {
     this.go('res', RESULTS_MS, last ? () => this.go('final') : () => this.nextRound());
   }
 
+  // Un juego en tiempo real puede terminar antes (por ejemplo, queda uno solo).
+  endPlayEarly() {
+    if (this.st.ph !== 'play' || this._early === this.st.k) return;
+    this._early = this.st.k;
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.collect(), 1500);
+  }
+
   toLobby() {
     clearTimeout(this.timer);
     this.st.rk = [];

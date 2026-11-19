@@ -10,6 +10,9 @@ import kraken from './kraken.js';
 import bombs from './bombs.js';
 import tiles from './tiles.js';
 import coins from './coins.js';
+import sumo from './sumo.js';
+import hotbomb from './hotbomb.js';
+import ice from './ice.js';
 
-export const GAMES = [kraken, bombs, tiles, coins, tap, reflex, count, memory, stopwatch];
+export const GAMES = [kraken, bombs, tiles, coins, sumo, hotbomb, ice, tap, reflex, count, memory, stopwatch];
 export const GAME_BY_ID = Object.fromEntries(GAMES.map((g) => [g.id, g]));

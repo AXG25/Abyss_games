@@ -9,7 +9,7 @@ compiten ronda tras ronda por estrellas ⭐.
 | | Juego | Cómo se gana |
 |---|---|---|
 | 👊 | Machaca el botón | Más toques en 8 s |
-| 🤠 | Reflejos de vaquero | Tocar primero cuando se pone verde (tocar antes = falta) |
+| 🤠 | Reflejos de vaquero *(3D)* | Duelo del oeste: el más rápido en disparar tras la campana tumba a todos |
 | 🔢 | Cuenta rápida | Contar el emoji objetivo y responder bien y rápido |
 | 🧠 | Simón dice | Repetir la secuencia de 6 colores |
 | ⏱️ | Para en 5.00 | Detener el cronómetro oculto lo más cerca de 5.00 s |

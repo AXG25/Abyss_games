@@ -122,7 +122,7 @@ export const validAvatar = (id) => (typeof id === 'string' && AV[id] ? id : 'fro
 
 export function avatarSVG(id) {
   const f = AV[id] || AV.frog;
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -4 108 108" class="avatar">${f()}</svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="-4 -4 108 108" width="100" height="100" class="avatar">${f()}</svg>`;
 }
 
 // <img> en caché para dibujar en canvas (2D y texturas 3D)
@@ -131,7 +131,7 @@ export function avatarImage(id) {
   id = validAvatar(id);
   if (imgCache.has(id)) return imgCache.get(id);
   const img = new Image();
-  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(avatarSVG(id).replace('class="avatar"', 'width="256" height="256"'));
+  img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(avatarSVG(id).replace('width="100" height="100"', 'width="256" height="256"'));
   imgCache.set(id, img);
   return img;
 }
@@ -181,7 +181,7 @@ const I = {
 };
 
 export function icon(name, cls = 'ic') {
-  return `<svg class="${cls}" viewBox="0 0 24 24" aria-hidden="true">${I[name] || ''}</svg>`;
+  return `<svg class="${cls}" viewBox="0 0 24 24" width="24" height="24" aria-hidden="true">${I[name] || ''}</svg>`;
 }
 
 // Reemplaza {nombre} por su icono. El texto debe venir ya escapado.
@@ -206,5 +206,5 @@ const GI = {
 };
 
 export function gameIcon(id, cls = 'gi') {
-  return `<svg class="${cls}" viewBox="0 0 64 64" aria-hidden="true">${GI[id] || ''}</svg>`;
+  return `<svg class="${cls}" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">${GI[id] || ''}</svg>`;
 }

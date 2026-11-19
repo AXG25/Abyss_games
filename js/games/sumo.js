@@ -266,14 +266,17 @@ const G = {
       speedRing.rotation.x = Math.PI / 2;
       speedRing.position.y = 1.0 * U;
       root.add(speedRing);
-      const face = new THREE.Sprite(new THREE.SpriteMaterial({ map: S.avatarTexture(e.a || 'frog'), transparent: true, depthWrite: false }));
-      face.scale.set(1.3 * U, 1.3 * U, 1);
-      face.renderOrder = 3;
-      root.add(face);
-      const headY = 2.5 * U;
-      face.position.y = headY;
+      // el piloto: cabeza 3D del personaje sobre el trompo (no gira con él)
+      const headObj = S.makeHead(e.a || 'frog', 0.62 * U);
+      const headY = 2.35 * U;
+      headObj.group.position.y = headY;
+      root.add(headObj.group);
+      const ghostM = S.makeGhost(0.8 * U);
+      ghostM.position.y = 1.4 * U;
+      ghostM.visible = false;
+      root.add(ghostM);
       return {
-        root, rig: top, face, headY, height: headY + 0.6 * U, U, legs: [], arms: [],
+        root, rig: top, headObj, ghostM, headY, height: headY + 0.9 * U, U, legs: [], arms: [],
         update(en, dt, t, a, s) {
           const fast = s.dashing ? 2.2 : 1;
           a.spinA = (a.spinA || 0) + dt * 28 * fast;
@@ -287,6 +290,11 @@ const G = {
           gem.material.emissiveIntensity = s.dashing ? 2 : 0.9;
           const blink = s.inv && Math.floor(t * 12) % 2;
           top.visible = !s.ghost && !blink;
+          headObj.group.visible = !s.ghost;
+          // la cabeza se tambalea con el trompo y mira hacia donde va
+          headObj.group.rotation.x = top.rotation.x * 0.5 - 0.15;
+          headObj.group.rotation.z = top.rotation.z * 0.5;
+          headObj.group.position.y = headY + Math.sin(t * 20) * 0.02 * U;
         },
       };
     },

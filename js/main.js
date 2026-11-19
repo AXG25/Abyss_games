@@ -328,7 +328,7 @@ function renderRoomLobby(st) {
           <button class="btn big primary" id="start">${icon('rocket')} ¡Empezar la fiesta!</button>
         </div>
         <div class="lbl center">o prueba un solo juego</div>
-        <div class="games-grid">${GAMES.map((g) => `<button class="game-card" data-g="${g.id}">${gameIcon(g.id)}<b>${esc(g.name)}</b>${g.realtime ? '<i class="rt-tag">3D</i>' : ''}</button>`).join('')}</div>
+        <div class="games-grid">${GAMES.map((g) => `<button class="game-card" data-g="${g.id}">${gameIcon(g.id)}<b>${esc(g.name)}</b>${g.realtime || g.uses3d ? '<i class="rt-tag">3D</i>' : ''}</button>`).join('')}</div>
       ` : `<div class="card waiting"><div class="dots"><i></i><i></i><i></i></div><p>Esperando a que el anfitrión ${icon('crown')} empiece…</p></div>`}
     </section>`;
   updateNetPill();
@@ -360,7 +360,7 @@ function renderIntro(st) {
       <div class="intro-players">${st.pl.map((p) => playerChip(st, p)).join('')}</div>
     </section>`;
   beep(440, 0.1, 'triangle');
-  if (g.realtime) preload3D();
+  if (g.realtime || g.uses3d) preload3D();
   const cd = $('.count-down');
   const start = Date.now();
   const t = setInterval(() => {
@@ -396,6 +396,15 @@ function renderPlay(st) {
     players: st.pl.map((p) => ({ ...p, c: colorOf(st, p.id) })),
     submit: (v) => { S.nr && S.nr.presence({ in: { k, v } }).catch(() => {}); },
     endEarly: S.host ? () => S.host && S.host.endPlayEarly() : null,
+    // resultados que ya enviaron los demás en esta ronda (id → valor)
+    results: () => {
+      const out = {};
+      for (const p of S.nr ? S.nr.peers() : []) {
+        const inp = p.presence && p.presence.in;
+        if (inp && inp.k === k && !p.sameTab) out[typeof p.presence.uid === 'string' ? p.presence.uid : p.peer] = inp.v;
+      }
+      return out;
+    },
     // Tiempo real: mi estado en vivo y el de los demás.
     live: (v) => { S.nr && S.nr.presence({ lv: { k, ...v } }).catch(() => {}); },
     others: () => (S.nr ? S.nr.peers() : [])

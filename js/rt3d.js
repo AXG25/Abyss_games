@@ -7,6 +7,7 @@
 // partículas y los personajes animados (caminar, saltar, golpe, impulso, caída).
 import * as THREE from '../vendor/three.module.min.js';
 import { avatarImage } from './icons.js';
+import { makeHead, makeGhost } from './head3d.js';
 
 export { THREE };
 
@@ -63,7 +64,7 @@ export const std = (color, extra = {}) => new THREE.MeshStandardMaterial({ color
 
 // ---------------------------------------------------------------- partículas
 // Un solo sistema de puntos con tamaño, color y transparencia por partícula.
-class Particles {
+export class Particles {
   constructor(scene, max = 900) {
     this.max = max;
     this.n = 0;
@@ -163,7 +164,7 @@ class Particles {
 
 // ---------------------------------------------------------------- personaje
 // Muñequito con piernas, brazos, torso y la cabeza con su emoji.
-function makeCharacter(e, PR) {
+export function makeCharacter(e, PR) {
   const U = PR; // unidad de tamaño
   const color = new THREE.Color(e.c || '#ffffff');
   const light = color.clone().lerp(new THREE.Color('#ffffff'), 0.45);
@@ -224,17 +225,17 @@ function makeCharacter(e, PR) {
     rig.add(pivot);
     return pivot;
   });
-  // cabeza: esfera de color con el emoji como cara (siempre mirando a la cámara)
-  const headY = hipY + 1.75 * U;
-  const head = cast(new THREE.Mesh(new THREE.SphereGeometry(0.5 * U, 18, 14), mLight));
-  head.position.y = headY;
-  rig.add(head);
-  const face = new THREE.Sprite(new THREE.SpriteMaterial({ map: avatarTexture(e.a || 'frog'), transparent: true, depthWrite: false }));
-  face.scale.set(1.75 * U, 1.75 * U, 1);
-  face.position.y = headY + 0.02 * U;
-  face.renderOrder = 3;
-  root.add(face);
-  return { root, rig, legs, arms, torso, head, face, headY, U, height: headY + 0.7 * U };
+  // cabeza: modelo 3D del personaje (gira con el cuerpo)
+  const headY = hipY + 1.85 * U;
+  const head = makeHead(THREE, e.a || 'frog', 0.78 * U);
+  head.group.position.y = headY;
+  rig.add(head.group);
+  // fantasma (cuando lo eliminan)
+  const ghostM = makeGhost(THREE, 0.9 * U);
+  ghostM.position.y = 1.6 * U;
+  ghostM.visible = false;
+  root.add(ghostM);
+  return { root, rig, legs, arms, torso, head: head.group, headObj: head, ghostM, headY, U, height: headY + 1.1 * U };
 }
 
 // ---------------------------------------------------------------- vista
@@ -266,13 +267,13 @@ export function createView3D(board, G, W, opts = {}) {
   scene.add(sun);
 
   const particles = new Particles(scene);
-  const S = { THREE, scene, camera, renderer, W, objs: {}, t: 0, particles, emojiTexture, avatarTexture, std };
+  const S = { THREE, scene, camera, renderer, W, objs: {}, t: 0, particles, emojiTexture, avatarTexture, std, makeHead: (id, r) => makeHead(THREE, id, r), makeGhost: (r) => makeGhost(THREE, r) };
   let shakeAmt = 0;
   S.shake = (a) => { shakeAmt = Math.min(0.08, Math.max(shakeAmt, a)); };
   S.burst = (x, y, z, o) => particles.burst(x, y, z, o);
   cfg.setup(S, W);
 
-  const PR = (G.PR || 0.06) * (cfg.charScale ?? 1.45);
+  const PR = (G.PR || 0.06) * (cfg.charScale ?? 1.6);
   const avatars = new Map();
   const ringGeo = new THREE.RingGeometry(PR * 1.0, PR * 1.3, 32);
 
@@ -380,10 +381,8 @@ export function createView3D(board, G, W, opts = {}) {
       // ---- fantasma
       if (ghost !== a.ghost) {
         a.ghost = ghost;
-        a.face.material.map = avatarTexture(ghost ? 'ghost' : e.a || 'frog');
-        a.face.material.opacity = ghost ? 0.55 : 1;
-        a.face.material.needsUpdate = true;
         a.rig.visible = !ghost;
+        if (a.ghostM) a.ghostM.visible = ghost;
       }
       const hide = cfg.hideOut && ghost;
       a.root.visible = !hide && scale > 0.02;
@@ -431,10 +430,14 @@ export function createView3D(board, G, W, opts = {}) {
       const sink = (1 - Math.max(0, Math.min(1, scale))) * (cfg.sinkDepth ?? 0.35);
       a.root.position.set(e.x, ghost ? 0.12 + Math.sin(t * 2 + e.x * 5) * 0.04 : jump - sink, e.y);
       a.root.scale.setScalar(Math.max(0.02, Math.min(1, scale)));
-      // la cara (emoji) va al frente de la cabeza, del lado de la cámara
-      camDir.subVectors(camera.position, a.root.position).normalize();
-      const fo = a.update ? 0.2 * a.U : 0.78 * a.U;
-      a.face.position.set(camDir.x * fo, (a.headY || PR * 2.7) + (a.update ? 0 : a.rig.position.y) + camDir.y * fo, camDir.z * fo);
+      if (a.headObj) a.headObj.blink(t + (a.blinkOff || (a.blinkOff = Math.random() * 5)));
+      // el fantasma mira hacia la cámara
+      if (ghost && a.ghostM) a.ghostM.rotation.y = Math.atan2(camera.position.x - e.x, camera.position.z - e.y);
+      // cabeza: mira un poco hacia la cámara cuando está quieto, y se ladea al correr
+      if (a.head && !a.update) {
+        a.head.rotation.z = Math.sin(a.phase * 0.5) * 0.06 * Math.min(1, a.spd / 0.5);
+        a.head.rotation.x = -0.15;
+      }
       if (a.ring) { a.ring.visible = a.root.visible && !ghost; a.ring.position.set(e.x, 0.006, e.y); }
       const tagTxt = cfg.tag ? cfg.tag(e) : null;
       if (tagTxt !== a.tagTxt) {

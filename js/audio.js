@@ -127,6 +127,17 @@ export const sfx = {
   },
   rumble: (v = 1) => { noise({ dur: 0.9, vol: 0.18 * v, type: 'lowpass', f0: 180, attack: 0.1 }); tone({ type: 'sine', f0: 50, dur: 0.8, vol: 0.12 * v }); },
   whistle: (v = 1) => tone({ type: 'sine', f0: 1500, f1: 420, dur: 1.25, vol: 0.035 * v, vib: 20 }),
+  gun: (v = 1) => {
+    noise({ dur: 0.05, vol: 0.5 * v, type: 'highpass', f0: 1500 });
+    noise({ dur: 0.45, vol: 0.35 * v, type: 'lowpass', f0: 3000, f1: 200 });
+    tone({ type: 'sine', f0: 160, f1: 45, dur: 0.25, vol: 0.3 * v });
+  },
+  ricochet: (v = 1) => tone({ type: 'sine', f0: 2600, f1: 900, dur: 0.35, vol: 0.05 * v, vib: 40 }),
+  click: (v = 1) => { noise({ dur: 0.02, vol: 0.15 * v, type: 'highpass', f0: 4000 }); noise({ dur: 0.03, vol: 0.12 * v, type: 'bandpass', f0: 1800, q: 4, at: 0.06 }); },
+  bell: () => { [880, 1320, 1760].forEach((f, i) => tone({ type: 'triangle', f0: f, dur: 1.4 - i * 0.3, vol: 0.09 / (i + 1) })); },
+  heart: (v = 1) => { tone({ type: 'sine', f0: 70, f1: 45, dur: 0.12, vol: 0.25 * v }); tone({ type: 'sine', f0: 65, f1: 40, dur: 0.14, vol: 0.18 * v, at: 0.18 }); },
+  wind: (v = 1) => noise({ dur: 2.5, vol: 0.05 * v, type: 'bandpass', f0: 400, f1: 900, q: 0.8, attack: 0.8 }),
+  thud: (v = 1) => { tone({ type: 'sine', f0: 120, f1: 50, dur: 0.2, vol: 0.2 * v }); noise({ dur: 0.15, vol: 0.1 * v, f0: 600 }); },
   tick: (v = 1) => tone({ type: 'square', f0: 1800, dur: 0.03, vol: 0.04 * v }),
   pass: (v = 1) => { tone({ type: 'square', f0: 520, f1: 1040, dur: 0.12, vol: 0.06 * v }); noise({ dur: 0.15, vol: 0.06 * v, type: 'bandpass', f0: 1500, q: 3 }); },
   fuse: (v = 1) => noise({ dur: 0.12, vol: 0.05 * v, type: 'bandpass', f0: 5000, q: 2 }),

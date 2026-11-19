@@ -216,9 +216,10 @@ Host.prototype.startLongLoop = function () {
 Host.prototype.longAct = function (id, a) {
   const st = this.st;
   const L = LONG_BY_ID[st.lgId];
-  if (st.ph !== 'long' || !st.lg || !L || !a || a.tn !== st.lg.tn) return;
+  // LOOSE: juegos donde todos juegan a la vez (Stop): no se exige el número de turno
+  if (st.ph !== 'long' || !st.lg || !L || !a || (!L.rules.LOOSE && a.tn !== st.lg.tn)) return;
   this.syncTurn(st.lg);
-  if (L.rules.act(st.lg, id, a, { elapsed: Date.now() - this.turnAt })) { this.syncTurn(st.lg); this.publish(); }
+  if (L.rules.act(st.lg, id, a, { elapsed: Date.now() - this.turnAt, host: true })) { this.syncTurn(st.lg); this.publish(); }
 };
 
 // Anota cuándo empezó el turno actual (para el reloj, los bots y el tiempo de turno).
@@ -247,7 +248,7 @@ Host.prototype.longTick = function () {
     const id = pid(peer);
     if (la.n <= (this.lastN[id] || 0)) continue;
     this.lastN[id] = la.n;
-    if (la.a && la.a.tn === lg.tn && L.rules.act(lg, id, la.a, { elapsed: Date.now() - this.turnAt })) { changed = true; this.syncTurn(lg); }
+    if (la.a && (L.rules.LOOSE || la.a.tn === lg.tn) && L.rules.act(lg, id, la.a, { elapsed: Date.now() - this.turnAt })) { changed = true; this.syncTurn(lg); }
   }
   const now = Date.now();
   // cuánto lleva desconectado cada jugador

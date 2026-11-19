@@ -13,6 +13,8 @@ import * as parques from './parques.js';
 import { mountParques } from './parques-ui.js';
 import * as domino from './domino.js';
 import { mountDomino } from './domino-ui.js';
+import * as stop from './stop.js';
+import { mountStop } from './stop-ui.js';
 
 export const LONG_GAMES = [
   {
@@ -54,6 +56,14 @@ export const LONG_GAMES = [
     min: 2, max: 4, mins: '15–40 min',
     rules: domino,
     mount: mountDomino,
+  },
+  {
+    id: 'stop',
+    name: 'Stop',
+    desc: 'Sale una letra y todos escriben a la vez: nombre, animal, fruta, ciudad… El primero que termine grita ¡STOP! Luego se vota qué vale. Categorías a tu gusto.',
+    min: 2, max: 4, mins: '10–25 min',
+    rules: stop,
+    mount: mountStop,
   },
 ];
 export const LONG_BY_ID = Object.fromEntries(LONG_GAMES.map((g) => [g.id, g]));

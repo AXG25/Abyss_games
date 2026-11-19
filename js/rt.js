@@ -1,0 +1,313 @@
+// Base para mini juegos en TIEMPO REAL (joystick + botón de acción).
+//
+// Cada juego describe su mundo y su física con funciones puras y deterministas
+// (misma semilla → mismo resultado), y este módulo se encarga de:
+//  - el bucle a 60 pasos por segundo, controles táctiles y teclado,
+//  - publicar mi estado ~15 veces/s y dibujar a los demás interpolados,
+//  - simular los bots SOLO en el anfitrión (y publicarlos),
+//  - enviar el resultado final.
+//
+// Un juego G define:
+//   TOTAL (s), action (texto del botón o null), lives
+//   world(seed) → W                       mundo determinista
+//   spawn(i, W) → p                       jugador nuevo en el puesto i
+//   step(p, inp, t, W, ext) → evento      física (inp = {x, y}; p.act = acción pedida)
+//   brain(seed, idx, W) → (p, t) => inp   IA de bot
+//   result(p) → v                         lo que se envía al anfitrión
+//   draw(g, view, t, W, ents, meId)       dibuja el escenario y las entidades
+//   opcionales: pack(p) → datos extra en red, hud(p), banner(t, W), sounds
+import { beep, buzz } from './util.js';
+
+export const DT = 1 / 60;
+export const TAU = Math.PI * 2;
+
+export function newPlayerBase(x, y, lives) {
+  return { x, y, z: 0, h: lives, inv: 0, out: false, tOut: 0, act: false, dash: 0, dcd: 0 };
+}
+
+// Movimiento estándar con "dash" opcional.
+export function moveBasic(p, inp, speed, dashable = true) {
+  if (dashable && p.act && p.dcd <= 0) { p.dash = 0.22; p.dcd = 1.3; p.act = false; p._ev = 'act'; }
+  p.act = false;
+  const k = p.dash > 0 ? 2.6 : 1;
+  if (p.dash > 0) p.dash -= DT;
+  if (p.dcd > 0) p.dcd -= DT;
+  let ix = inp.x, iy = inp.y;
+  const l = Math.hypot(ix, iy);
+  if (l > 1) { ix /= l; iy /= l; }
+  if (p.dash > 0 && l < 0.2 && p.ldx !== undefined) { ix = p.ldx; iy = p.ldy; }
+  if (l > 0.2) { p.ldx = ix / Math.max(l, 1e-6); p.ldy = iy / Math.max(l, 1e-6); }
+  p.x += ix * speed * k * DT;
+  p.y += iy * speed * k * DT;
+  if (p.inv > 0) p.inv -= DT;
+}
+
+export function clampCircle(p, rMax) {
+  const r = Math.hypot(p.x, p.y);
+  if (r > rMax) { p.x *= rMax / r; p.y *= rMax / r; }
+}
+
+export function clampBox(p, m) {
+  p.x = Math.max(-m, Math.min(m, p.x));
+  p.y = Math.max(-m, Math.min(m, p.y));
+}
+
+export function simulateBot(G, seed, idx) {
+  const W = G.world(seed);
+  const p = G.spawn(idx + 1, W);
+  const brain = G.brain(seed, idx, W);
+  const n = Math.floor(G.TOTAL / DT);
+  for (let i = 0; i < n && !p.out; i++) G.step(p, brain(p, i * DT), i * DT, W, null);
+  return G.result(p);
+}
+
+// Dibuja a un jugador (sombra, cuerpo de color, emoji).
+export function drawPlayer(g, v, e, meId, t) {
+  const px = v.X(e.x), py = v.Y(e.y) - (e.z || 0) * v.R * 0.12;
+  const pr = (e.pr || 0.06) * v.R * (1 + (e.z || 0) * 0.4) * (e.scale ?? 1);
+  if (pr <= 0.5) return;
+  g.beginPath();
+  g.ellipse(v.X(e.x), v.Y(e.y) + 3, pr, pr * 0.6, 0, 0, TAU);
+  g.fillStyle = 'rgba(0,0,0,0.3)';
+  g.fill();
+  if (e.out) g.globalAlpha = 0.25;
+  else if (e.inv > 0 && Math.floor(t * 12) % 2) g.globalAlpha = 0.4;
+  g.beginPath();
+  g.arc(px, py, pr * 1.15, 0, TAU);
+  g.fillStyle = e.c;
+  g.fill();
+  if (e.id === meId) { g.lineWidth = 3; g.strokeStyle = '#fff'; g.stroke(); }
+  g.font = `${Math.round(pr * 1.5)}px system-ui, 'Apple Color Emoji', 'Segoe UI Emoji'`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(e.out ? '👻' : e.a, px, py + 1);
+  if (e.tag !== undefined) {
+    g.font = `bold ${Math.round(pr * 0.9)}px system-ui`;
+    g.fillStyle = '#fff';
+    g.strokeStyle = 'rgba(0,0,0,0.6)';
+    g.lineWidth = 3;
+    g.strokeText(e.tag, px, py - pr * 1.8);
+    g.fillText(e.tag, px, py - pr * 1.8);
+  }
+  g.globalAlpha = 1;
+}
+
+const SOUNDS = {
+  act: () => beep(520, 0.08, 'triangle'),
+  hit: () => { beep(150, 0.25, 'sawtooth', 0.08); buzz(150); },
+  out: () => { beep(110, 0.5, 'sawtooth', 0.08); buzz(400); },
+  coin: () => beep(1320, 0.07, 'square', 0.05),
+  big: () => { beep(988, 0.08, 'square', 0.06); setTimeout(() => beep(1568, 0.12, 'square', 0.06), 80); },
+  fall: () => { beep(400, 0.4, 'sine', 0.08); buzz(200); },
+};
+
+export function mountRT(el, ctx, G) {
+  el.innerHTML = `
+    <div class="g-kraken">
+      <div class="k-hud"><span class="k-lives"></span><span class="k-time">${G.TOTAL}</span><span class="k-alive"></span></div>
+      <div class="k-board"><canvas></canvas><div class="k-msg" hidden></div><div class="k-banner" hidden></div></div>
+      <div class="k-ctrl">
+        <div class="k-joy"><div class="k-knob"></div></div>
+        ${G.action ? `<button class="k-jump" style="--c:${ctx.color}">${G.action}</button>` : '<div class="k-tip">Muévete con el joystick</div>'}
+      </div>
+    </div>`;
+  const canvas = el.querySelector('canvas');
+  const g = canvas.getContext('2d');
+  const board = el.querySelector('.k-board');
+  const livesEl = el.querySelector('.k-lives');
+  const timeEl = el.querySelector('.k-time');
+  const aliveEl = el.querySelector('.k-alive');
+  const msg = el.querySelector('.k-msg');
+  const banner = el.querySelector('.k-banner');
+  const joy = el.querySelector('.k-joy');
+  const knob = el.querySelector('.k-knob');
+  const actBtn = el.querySelector('.k-jump');
+  const view = { size: 300, R: 138, X: (v) => v, Y: (v) => v };
+
+  const resize = () => {
+    const size = Math.max(200, Math.min(board.clientWidth, board.clientHeight));
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.width = size * dpr;
+    canvas.height = size * dpr;
+    canvas.style.width = size + 'px';
+    canvas.style.height = size + 'px';
+    g.setTransform(dpr, 0, 0, dpr, 0, 0);
+    const c = size / 2;
+    const R = size * 0.47;
+    Object.assign(view, { size, R, c, X: (v) => c + v * R, Y: (v) => c + v * R });
+  };
+  resize();
+  const ro = new ResizeObserver(resize);
+  ro.observe(board);
+
+  const W = G.world(ctx.seed);
+  const players = ctx.players;
+  const myIdx = Math.max(0, players.findIndex((p) => p.id === ctx.me));
+  const me = G.spawn(myIdx, W);
+  const bots = ctx.isHost
+    ? players.filter((p) => p.b).map((p) => {
+      const bi = Number(String(p.id).slice(3)) || 0;
+      return { id: p.id, p: G.spawn(bi + 1, W), brain: G.brain(ctx.seed, bi, W) };
+    })
+    : [];
+
+  // --- controles
+  const inp = { x: 0, y: 0 };
+  let joyId = null;
+  let jc = { x: 0, y: 0 };
+  const setKnob = (dx, dy) => { knob.style.transform = `translate(${dx}px, ${dy}px)`; };
+  const moveJoy = (e) => {
+    if (e.pointerId !== joyId) return;
+    const max = joy.clientWidth * 0.32;
+    let dx = e.clientX - jc.x;
+    let dy = e.clientY - jc.y;
+    const l = Math.hypot(dx, dy);
+    if (l > max) { dx *= max / l; dy *= max / l; }
+    setKnob(dx, dy);
+    const n = Math.hypot(dx, dy) / max;
+    inp.x = n > 0.15 ? dx / max : 0;
+    inp.y = n > 0.15 ? dy / max : 0;
+  };
+  joy.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    joyId = e.pointerId;
+    try { joy.setPointerCapture(e.pointerId); } catch { /* nada */ }
+    const r = joy.getBoundingClientRect();
+    jc = { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    moveJoy(e);
+  });
+  joy.addEventListener('pointermove', moveJoy);
+  const endJoy = (e) => { if (e.pointerId !== joyId) return; joyId = null; inp.x = inp.y = 0; setKnob(0, 0); };
+  joy.addEventListener('pointerup', endJoy);
+  joy.addEventListener('pointercancel', endJoy);
+  if (actBtn) {
+    actBtn.addEventListener('pointerdown', (e) => { e.preventDefault(); me.act = true; actBtn.classList.add('down'); });
+    actBtn.addEventListener('pointerup', () => actBtn.classList.remove('down'));
+  }
+  const keys = new Set();
+  const kd = (e) => { keys.add(e.key); if (e.key === ' ') me.act = true; };
+  const ku = (e) => keys.delete(e.key);
+  addEventListener('keydown', kd);
+  addEventListener('keyup', ku);
+
+  // --- otros jugadores
+  const smooth = new Map();
+  const colorOf = Object.fromEntries(players.map((p) => [p.id, p.c]));
+  const avOf = Object.fromEntries(players.map((p) => [p.id, p.a]));
+  const remote = () => {
+    const out = [];
+    for (const { id, lv } of ctx.others()) {
+      if (!lv || !colorOf[id]) continue;
+      out.push({ id, x: +lv.x || 0, y: +lv.y || 0, z: +lv.z || 0, h: lv.h, out: !!lv.out, inv: lv.inv, e: lv.e });
+      if (Array.isArray(lv.b)) {
+        for (const b of lv.b) {
+          if (Array.isArray(b) && colorOf[b[0]]) out.push({ id: b[0], x: +b[1] || 0, y: +b[2] || 0, z: +b[3] || 0, h: b[4], out: !!b[5], inv: b[6], e: b[7] });
+        }
+      }
+    }
+    return out;
+  };
+
+  const showMsg = (txt, ms = 1200) => {
+    msg.textContent = txt;
+    msg.hidden = false;
+    clearTimeout(showMsg.t);
+    if (ms) showMsg.t = setTimeout(() => { msg.hidden = true; }, ms);
+  };
+  showMsg('¡Ya!', 900);
+
+  let acc = 0;
+  let simT = 0;
+  let last = performance.now();
+  let lastPub = 0;
+  let raf = 0;
+  let finished = false;
+  let submitted = false;
+  let lastBanner = '';
+  const ext = { taken: new Set() };
+  const submit = () => {
+    if (submitted) return;
+    submitted = true;
+    ctx.submit(G.result(me));
+  };
+  const r3 = (v) => Math.round(v * 1000) / 1000;
+
+  const frame = (now) => {
+    const dt = Math.min(0.1, (now - last) / 1000);
+    last = now;
+    acc += dt;
+    const others = remote();
+    ext.remote = others;
+    if (G.collectTaken) G.collectTaken(ext, others);
+    while (acc >= DT && simT < G.TOTAL) {
+      let ix = inp.x, iy = inp.y;
+      if (keys.size) {
+        ix = (keys.has('ArrowRight') || keys.has('d') ? 1 : 0) - (keys.has('ArrowLeft') || keys.has('a') ? 1 : 0);
+        iy = (keys.has('ArrowDown') || keys.has('s') ? 1 : 0) - (keys.has('ArrowUp') || keys.has('w') ? 1 : 0);
+      }
+      const ev = G.step(me, { x: ix, y: iy }, simT, W, ext);
+      if (ev && SOUNDS[ev]) SOUNDS[ev]();
+      if (ev === 'hit') showMsg('¡Ay! 💥', 700);
+      if (ev === 'fall') showMsg('¡Al agua! 🌊', 900);
+      if (ev === 'out') { showMsg('👻 ¡Eliminado!', 0); submit(); }
+      for (const b of bots) G.step(b.p, b.brain(b.p, simT), simT, W, null);
+      simT += DT;
+      acc -= DT;
+    }
+    if (simT >= G.TOTAL && !finished) {
+      finished = true;
+      if (!me.out) { showMsg(G.endText ? G.endText(me) : '🎉 ¡Sobreviviste!', 0); beep(880, 0.2, 'triangle'); }
+      submit();
+    }
+    if (now - lastPub > 66) {
+      lastPub = now;
+      const lv = { x: r3(me.x), y: r3(me.y), z: r3(me.z || 0), h: me.h, out: me.out ? 1 : 0, inv: me.inv > 0 ? 1 : 0 };
+      if (G.pack) lv.e = G.pack(me);
+      if (bots.length) lv.b = bots.map((b) => [b.id, r3(b.p.x), r3(b.p.y), r3(b.p.z || 0), b.p.h, b.p.out ? 1 : 0, b.p.inv > 0 ? 1 : 0, G.pack ? G.pack(b.p) : null]);
+      ctx.live(lv);
+    }
+    const ents = [];
+    for (const e of others) {
+      let s = smooth.get(e.id);
+      if (!s) { s = { x: e.x, y: e.y, z: e.z }; smooth.set(e.id, s); }
+      s.x += (e.x - s.x) * 0.35;
+      s.y += (e.y - s.y) * 0.35;
+      s.z += (e.z - s.z) * 0.5;
+      ents.push({ ...e, x: s.x, y: s.y, z: s.z, c: colorOf[e.id], a: avOf[e.id] });
+    }
+    for (const b of bots) ents.push({ id: b.id, ...b.p, e: G.pack ? G.pack(b.p) : null, c: colorOf[b.id], a: avOf[b.id] });
+    ents.push({ id: ctx.me, ...me, e: G.pack ? G.pack(me) : null, c: ctx.color, a: avOf[ctx.me] || '🙂' });
+    ents.sort((a, b) => (a.z || 0) - (b.z || 0));
+    const tDraw = Math.min(simT, G.TOTAL - DT);
+    G.draw(g, view, tDraw, W, ents, ctx.me, ext);
+    livesEl.textContent = G.hud ? G.hud(me) : me.out ? '👻' : '❤️'.repeat(Math.max(0, me.h)) + '🖤'.repeat(Math.max(0, G.lives - me.h));
+    timeEl.textContent = Math.max(0, Math.ceil(G.TOTAL - simT));
+    aliveEl.textContent = G.hudRight ? G.hudRight(ents) : `🧍 ${ents.filter((e) => !e.out).length}`;
+    const bn = G.banner ? G.banner(tDraw, W) : null;
+    const key = bn ? bn.text + bn.color : '';
+    if (key !== lastBanner) {
+      lastBanner = key;
+      banner.hidden = !bn;
+      if (bn) { banner.textContent = bn.text; banner.style.background = bn.color; beep(660, 0.1, 'triangle'); }
+    }
+    raf = requestAnimationFrame(frame);
+  };
+  raf = requestAnimationFrame(frame);
+
+  return () => {
+    cancelAnimationFrame(raf);
+    ro.disconnect();
+    removeEventListener('keydown', kd);
+    removeEventListener('keyup', ku);
+    clearTimeout(showMsg.t);
+  };
+}
+
+// Evaluación típica de supervivencia: sobrevivir > durar más.
+export function evalSurvival(v, TOTAL, LIVES) {
+  if (!v || typeof v.t !== 'number') return null;
+  const h = Math.max(0, Math.min(LIVES, Math.floor(v.h) || 0));
+  const t = Math.max(0, Math.min(TOTAL * 1000, v.t));
+  if (t >= TOTAL * 1000 && h > 0) return { score: 1e6 + h * 1e5, label: `${'❤️'.repeat(h)} ¡sobrevivió!` };
+  return { score: t, label: `cayó a los ${(t / 1000).toFixed(1)} s` };
+}

@@ -13,6 +13,10 @@ compiten ronda tras ronda por estrellas ⭐.
 | 🔢 | Cuenta rápida | Contar el emoji objetivo y responder bien y rápido |
 | 🧠 | Simón dice | Repetir la secuencia de 6 colores |
 | ⏱️ | Para en 5.00 | Detener el cronómetro oculto lo más cerca de 5.00 s |
+| 🐙 | Kraken en cubierta *(tiempo real)* | Saltar los tentáculos que giran en el barco; sobrevivir más |
+| 💣 | Lluvia de bombas *(tiempo real)* | Esquivar las bombas por su sombra; 3 vidas |
+| 🟩 | Pisa el color *(tiempo real)* | Pararse en el color anunciado antes de que el piso se caiga |
+| 🪙 | Fiebre de monedas *(tiempo real)* | Recoger más monedas en 30 s |
 
 Puntos por ronda: 1.º 3⭐ · 2.º 2⭐ · 3.º 1⭐ · 4.º 0⭐.
 
@@ -29,6 +33,13 @@ Puntos por ronda: 1.º 3⭐ · 2.º 2⭐ · 3.º 1⭐ · 4.º 0⭐.
 - **Bots** para probar solo (el anfitrión los agrega con +/−).
 - **Modo local**: fuera de Claude se usa `BroadcastChannel`, así que varias
   pestañas del mismo navegador pueden jugar entre sí.
+
+## Juegos en tiempo real
+
+`js/rt.js` es la base: joystick, botón de acción, bucle a 60 pasos/s, envío de
+la posición ~15 veces/s y bots simulados por el anfitrión. Un juego nuevo solo
+describe su mundo (`world`), su física (`step`), su IA de bot (`brain`) y cómo
+se dibuja (`draw`). Mira `js/games/bombs.js` como ejemplo.
 
 ## Agregar un mini juego
 

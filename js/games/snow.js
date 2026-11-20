@@ -114,7 +114,7 @@ function firstBelow(obs, y0) {
   return lo;
 }
 
-const G = {
+export const G = {
   TOTAL, LIVES: 1, lives: 1,
   action: 'SALTA',
   actionIcon: 'jump',
@@ -404,7 +404,8 @@ function buildScene(S, W) {
   // rocas, troncos y rampas
   const rockM = new THREE.MeshStandardMaterial({ color: '#6c757d', roughness: 0.9, flatShading: true });
   const logM = new THREE.MeshStandardMaterial({ color: '#8d5a3b', roughness: 0.8 });
-  const rampM = new THREE.MeshStandardMaterial({ color: '#4cc9f0', roughness: 0.4 });
+  // rampa: lados en triángulo más oscuros para que se note hacia dónde sube
+  const rampM = [new THREE.MeshStandardMaterial({ color: '#0077b6', roughness: 0.5 }), new THREE.MeshStandardMaterial({ color: '#4cc9f0', roughness: 0.4 })];
   const arrowM = new THREE.MeshBasicMaterial({ color: '#ffffff' });
   for (const o of W.obs) {
     if (o.t === 'rock') {
@@ -431,7 +432,8 @@ function buildScene(S, W) {
         scene.add(end);
       }
     } else if (o.t === 'ramp') {
-      const sh = new THREE.Shape([new THREE.Vector2(-o.hd, 0), new THREE.Vector2(o.hd, 0), new THREE.Vector2(-o.hd, 0.08)]);
+      // de perfil: sube desde arriba de la montaña hacia la meta (lo alto queda hacia abajo)
+      const sh = new THREE.Shape([new THREE.Vector2(-o.hd, 0), new THREE.Vector2(o.hd, 0), new THREE.Vector2(o.hd, 0.08)]);
       const geo = new THREE.ExtrudeGeometry(sh, { depth: o.hw * 2, bevelEnabled: false });
       geo.translate(0, 0, -o.hw);
       const m = new THREE.Mesh(geo, rampM);
@@ -440,8 +442,8 @@ function buildScene(S, W) {
       m.castShadow = true;
       scene.add(m);
       const ar = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.07, 3), arrowM);
-      ar.rotation.x = -Math.PI / 2 - 0.4;
-      ar.position.set(o.x, 0.055, o.y + 0.01);
+      ar.rotation.x = -Math.PI / 2 + 0.42;
+      ar.position.set(o.x, 0.05, o.y - 0.01);
       scene.add(ar);
     }
   }
@@ -500,53 +502,75 @@ function buildScene(S, W) {
   Object.assign(S.objs, { flags, banner });
 }
 
-// Muñeco sobre una tabla de snowboard (de lado, rodillas dobladas y brazos abiertos).
-function makeRider(S, e, U) {
+// Muñeco sobre una tabla de snowboard: de lado, con los pies abiertos a lo largo
+// de la tabla, rodillas un poco dobladas y los brazos abiertos para equilibrar.
+export function makeRider(S, e, U) {
   const { THREE } = S;
   const ch = S.makeCharacter(e, U);
   const board = new THREE.Group();
-  const deck = new THREE.Mesh(new THREE.BoxGeometry(U * 0.95, U * 0.14, U * 3.4), new THREE.MeshStandardMaterial({ color: e.c || '#ffffff', roughness: 0.4 }));
+  const deckM = new THREE.MeshStandardMaterial({ color: e.c || '#ffffff', roughness: 0.4 });
+  const deck = new THREE.Mesh(new THREE.BoxGeometry(U * 0.95, U * 0.14, U * 3.4), deckM);
   deck.castShadow = true;
   board.add(deck);
   for (const s of [-1, 1]) {
-    const tip = new THREE.Mesh(new THREE.CylinderGeometry(U * 0.475, U * 0.475, U * 0.14, 16, 1, false, 0, Math.PI), deck.material);
-    tip.position.z = s * U * 1.7;
-    tip.rotation.y = s > 0 ? -Math.PI / 2 : Math.PI / 2;
+    // puntas redondeadas y un poco levantadas
+    const tip = new THREE.Mesh(new THREE.CylinderGeometry(U * 0.475, U * 0.475, U * 0.14, 16, 1, false, 0, Math.PI), deckM);
+    tip.position.set(0, U * 0.05, s * U * 1.7);
+    tip.rotation.set(s * 0.25, s > 0 ? -Math.PI / 2 : Math.PI / 2, 0);
     board.add(tip);
   }
   const stripe = new THREE.Mesh(new THREE.BoxGeometry(U * 0.3, U * 0.15, U * 3.0), new THREE.MeshStandardMaterial({ color: '#ffffff' }));
   board.add(stripe);
+  // fijaciones (donde van los pies)
+  const bindM = new THREE.MeshStandardMaterial({ color: '#2b2d42' });
+  for (const s of [-1, 1]) {
+    const b = new THREE.Mesh(new THREE.BoxGeometry(U * 0.8, U * 0.12, U * 0.5), bindM);
+    b.position.set(0, U * 0.12, s * U * 0.62);
+    board.add(b);
+  }
   board.position.y = U * 0.07;
+  // el muñeco va en su propio grupo, para girarlo junto con la tabla en los trucos
+  const body = new THREE.Group();
+  body.add(ch.rig);
   ch.root.add(board);
-  ch.rig.position.y = U * 0.14;
+  ch.root.add(body);
+  // pies abiertos (a lo largo de la tabla una vez que el cuerpo queda de lado)
+  ch.legs.forEach((l, i) => { const s = i ? 1 : -1; l.position.x = s * U * 0.5; l.rotation.z = s * 0.22; });
   return {
     ...ch,
     update(en, dt, t, a, s) {
       const vx = typeof en.vx === 'number' ? en.vx : (en.e && en.e.vx) || 0;
-      // la tabla apunta hacia abajo de la montaña y gira un poco al tallar
+      // la tabla apunta hacia la meta y gira un poco al tallar
       const yawT = Math.PI + Math.atan2(vx, 1.2) * 0.8;
       a.byaw = a.byaw === undefined ? yawT : a.byaw + (yawT - a.byaw) * Math.min(1, dt * 10);
       board.rotation.y = a.byaw;
-      board.rotation.z = -vx * 0.25;
+      board.rotation.z = -vx * 0.12;
       board.visible = !s.ghost;
-      // el cuerpo va de lado sobre la tabla y se inclina hacia la curva
-      ch.rig.rotation.set(0, a.byaw - Math.PI / 2 + 0.35, 0);
-      ch.rig.rotation.z = 0;
-      ch.root.rotation.z = -vx * 0.18;
-      if (s.z > 0.05) {
-        // en el aire: brazos arriba y una vuelta si viene de una rampa
+      // el cuerpo de lado sobre la tabla, girado un poco hacia la cámara
+      body.rotation.y = a.byaw - Math.PI / 2 - 0.4;
+      ch.rig.rotation.set(0, 0, 0);
+      ch.rig.position.y = U * 0.2;
+      // se inclina hacia la curva (todo: tabla y muñeco)
+      ch.root.rotation.z = -vx * 0.16;
+      const air = s.z > 0.05;
+      if (air) {
+        // en el aire: rodillas arriba, brazos arriba y un giro de 360° si salta alto
         a.air = (a.air || 0) + dt;
-        ch.legs[0].rotation.x = -0.9; ch.legs[1].rotation.x = -0.9;
-        ch.arms[0].rotation.x = -2.4; ch.arms[1].rotation.x = -2.4;
-        if (s.z > 0.3) ch.rig.rotation.y += Math.min(1, a.air / 0.6) * TAU;
+        ch.legs[0].rotation.x = ch.legs[1].rotation.x = -0.5;
+        ch.arms[0].rotation.set(0, 0, -2.3);
+        ch.arms[1].rotation.set(0, 0, 2.3);
+        ch.root.rotation.y = s.z > 0.28 ? Math.min(1, a.air / 0.55) * TAU : 0;
       } else {
         a.air = 0;
-        const k = Math.sin(t * 6 + a.U * 50) * 0.08;
-        ch.legs[0].rotation.x = -0.45 + k; ch.legs[1].rotation.x = -0.45 - k;
-        ch.arms[0].rotation.x = -0.3; ch.arms[1].rotation.x = -0.3;
-        ch.arms[0].rotation.z = 1.1; ch.arms[1].rotation.z = -1.1;
+        ch.root.rotation.y = 0;
+        // rodillas dobladas que rebotan un poco y brazos abiertos para equilibrar
+        const k = Math.sin(t * 7 + a.U * 50) * 0.06;
+        ch.legs[0].rotation.x = -0.18 + k;
+        ch.legs[1].rotation.x = -0.18 - k;
+        ch.arms[0].rotation.set(0.2, 0, -1.15 + k);
+        ch.arms[1].rotation.set(-0.2, 0, 1.15 - k);
       }
-      ch.rig.position.y = U * 0.14 - (s.z > 0.05 ? 0 : U * 0.12);
+      ch.torso.rotation.x = air ? 0 : 0.18; // un poco agachado
       const blink = s.inv && !s.ghost && Math.floor(t * 12) % 2;
       ch.rig.visible = !s.ghost && !blink;
     },

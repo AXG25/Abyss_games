@@ -22,6 +22,7 @@ compiten ronda tras ronda por estrellas ⭐.
 | 🪙 | Fiebre de monedas *(tiempo real)* | Recoger más monedas en 30 s |
 | 🌀 | Trompos de batalla *(tiempo real)* | Por rondas: embiste a los demás para sacarlos del estadio; la ronda la gana el último en pie y el primero en ganar 3 rondas gana |
 | 💥 | Bomba caliente *(tiempo real)* | Pasar la bomba antes de que explote; gana el último en pie |
+| 🎨 | Pinta el piso *(tiempo real)* | Cada casilla que pisas queda de tu color (y repintas la de los demás). Bombas de pintura que salpican alrededor y CORRE para embestir y marear. A los 45 s gana quien tenga más piso |
 | 🧊 | Hielo frágil *(tiempo real)* | El hielo que pisas se hunde; gana el último en pie |
 
 Puntos por ronda: 1.º 3⭐ · 2.º 2⭐ · 3.º 1⭐ · 4.º 0⭐.

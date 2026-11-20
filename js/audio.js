@@ -160,6 +160,7 @@ export const sfx = {
   wind: (v = 1) => noise({ dur: 2.5, vol: 0.05 * v, type: 'bandpass', f0: 400, f1: 900, q: 0.8, attack: 0.8 }),
   thud: (v = 1) => { tone({ type: 'sine', f0: 120, f1: 50, dur: 0.2, vol: 0.2 * v }); noise({ dur: 0.15, vol: 0.1 * v, f0: 600 }); },
   ready: () => tone({ type: 'sine', f0: 1320, f1: 1760, dur: 0.09, vol: 0.035 }),
+  splat: (v = 1) => { noise({ dur: 0.09, vol: 0.1 * v, type: 'lowpass', f0: 1400, f1: 300 }); tone({ type: 'sine', f0: 420 + Math.random() * 200, f1: 180, dur: 0.08, vol: 0.05 * v }); },
   tick: (v = 1) => tone({ type: 'square', f0: 1800, dur: 0.03, vol: 0.04 * v }),
   pass: (v = 1) => { tone({ type: 'square', f0: 520, f1: 1040, dur: 0.12, vol: 0.06 * v }); noise({ dur: 0.15, vol: 0.06 * v, type: 'bandpass', f0: 1500, q: 3 }); },
   fuse: (v = 1) => noise({ dur: 0.12, vol: 0.05 * v, type: 'bandpass', f0: 5000, q: 2 }),

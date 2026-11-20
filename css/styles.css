@@ -400,6 +400,15 @@ input:focus { border-color: var(--yellow); }
 .sw-stage { flex: 1; width: 100%; position: relative; min-height: 40vh; border-radius: 24px; overflow: hidden; display: grid; place-items: center; }
 .sw-res { min-height: 26px; font-size: 18px; text-align: center; }
 .sw-res b { color: var(--yellow); }
+/* ¿Dónde está? */
+.fi-top b { color: var(--c); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6); font-size: 24px; }
+.fi-stage { min-height: 50vh; touch-action: none; }
+.fi-2d { position: absolute; inset: 0; }
+.fi-clock { position: absolute; top: 10px; right: 12px; z-index: 2; font-family: var(--display); font-size: 30px; color: var(--yellow); background: rgba(0, 0, 0, 0.45); border-radius: 14px; padding: 2px 12px; pointer-events: none; }
+.fi-clock[hidden] { display: none; }
+.fi-clock.hot { color: #ff4d6d; }
+.fi-stage.fi-bad { animation: fiBad 0.35s; }
+@keyframes fiBad { 0%, 100% { box-shadow: inset 0 0 0 0 rgba(255, 77, 109, 0); } 30% { box-shadow: inset 0 0 0 6px rgba(255, 77, 109, 0.9); } }
 /* Equilibrio */
 .st-hud { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 4px; }
 .st-h { font-family: var(--display); font-size: 26px; color: var(--yellow); min-width: 96px; }

@@ -19,6 +19,7 @@ import swords from './swords.js';
 import paint from './paint.js';
 import chicken from './chicken.js';
 import stack from './stack.js';
+import findit from './findit.js';
 
-export const GAMES = [swords, race, archery, kraken, bombs, tiles, coins, sumo, hotbomb, ice, paint, tap, reflex, count, memory, stopwatch, chicken, stack];
+export const GAMES = [swords, race, archery, kraken, bombs, tiles, coins, sumo, hotbomb, ice, paint, tap, reflex, count, memory, stopwatch, chicken, stack, findit];
 export const GAME_BY_ID = Object.fromEntries(GAMES.map((g) => [g.id, g]));

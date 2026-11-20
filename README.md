@@ -18,6 +18,7 @@ compiten ronda tras ronda por estrellas ⭐.
 | ⏱️ | Para en… *(3D)* | 3 rondas: detén el cronómetro gigante en el segundo pedido (1–10) |
 | 🎈 | Gallina *(3D)* | 3 rondas: un globo se infla y su premio sube; plántate antes de que explote. El último en plantarse gana el doble. Si ya todos se plantaron, el globo se acelera |
 | ⚖️ | Equilibrio *(3D, física)* | Una grúa pasa con la pieza siguiente: suéltala y gírala para armar la torre más alta en 40 s. Física real: si queda descentrada, se cae. Todos reciben las mismas piezas y se ven las alturas de los demás en vivo |
+| 🔍 | ¿Dónde está? *(3D)* | 5 rondas: encuentra el juguete pedido ("el patito amarillo") en una mesa llena de trampas; tocar uno equivocado bloquea 1 s y en las últimas rondas la mesa gira. Gana el que menos tiempo sume |
 | 🐙 | Kraken en cubierta *(tiempo real)* | Saltar los tentáculos que giran en el barco; sobrevivir más |
 | 💣 | Lluvia de bombas *(tiempo real)* | Esquivar bombas, cajas que caen y barriles que ruedan (se saltan); 3 vidas |
 | 🟩 | Pisa el color *(tiempo real)* | Pararse en el color anunciado antes de que el piso se caiga |

@@ -14,6 +14,10 @@ const INTRO_MS = 4500;
 const GRACE_MS = 1500;
 const RESULTS_MS = 6000;
 const POINTS = [3, 2, 1, 0];
+// Votación al final: qué hacer después de la partida.
+export const VOTES = ['again', 'next', 'lobby'];
+export const VOTE_MS = 20000;   // se decide cuando votan todos, o a los 20 s si ya votó alguien
+const VOTE_SHOW_MS = 1800;      // se muestra lo que ganó antes de hacerlo
 
 export class Host {
   constructor(nr, prev, onChange) {
@@ -77,6 +81,7 @@ export class Host {
     } else {
       const here = new Set(hs.map(pid));
       st.pl.forEach((p) => { if (!p.b) p.off = here.has(p.id) ? 0 : 1; });
+      if (st.ph === 'final') this.voteTick();
     }
     this.publish();
   }
@@ -98,6 +103,8 @@ export class Host {
     const st = this.st;
     if (!st.pl.length) return;
     const r = mulberry32(Date.now());
+    st.vr = null;
+    st.solo = onlyGame ? 1 : 0;
     if (onlyGame) {
       st.seq = [onlyGame];
     } else {
@@ -176,8 +183,52 @@ export class Host {
     this.timer = setTimeout(() => this.collect(), 1500);
   }
 
+  // ---- votación del final (solo votan los humanos que siguen en la sala)
+  voteTick() {
+    const st = this.st;
+    if (this.vk !== st.k) { this.vk = st.k; this.vAt = Date.now(); this.vDone = false; st.vr = null; }
+    if (this.vDone) return;
+    const humans = st.pl.filter((p) => !p.b && !p.off).map((p) => p.id);
+    const votes = {};
+    for (const peer of this.nr.peers()) {
+      const vt = peer.presence && peer.presence.vt;
+      const id = pid(peer);
+      if (vt && vt.k === st.k && VOTES.includes(vt.v) && humans.includes(id)) votes[id] = vt.v;
+    }
+    const n = Object.keys(votes).length;
+    const all = humans.length > 0 && n === humans.length;
+    if (!all && !(n > 0 && Date.now() - this.vAt > VOTE_MS)) return;
+    // gana la mayoría; si hay empate decide el voto del anfitrión (o el orden de la lista)
+    const count = Object.fromEntries(VOTES.map((v) => [v, 0]));
+    for (const v of Object.values(votes)) count[v]++;
+    const max = Math.max(...Object.values(count));
+    const tied = VOTES.filter((v) => count[v] === max);
+    const mine = votes[pid(this.nr.peers().find((p) => p.isMe) || {})];
+    const win = tied.includes(mine) ? mine : tied[0];
+    this.vDone = true;
+    st.vr = win;
+    this.publish();
+    clearTimeout(this.timer);
+    this.timer = setTimeout(() => this.applyVote(win), VOTE_SHOW_MS);
+  }
+
+  applyVote(v) {
+    const st = this.st;
+    if (st.ph !== 'final') return;
+    if (v === 'lobby') return this.toLobby();
+    // quien ya se fue no sigue en la próxima partida
+    st.pl = st.pl.filter((p) => p.b || !p.off);
+    if (v === 'again') return this.start(st.solo ? st.seq[0] : null);
+    // siguiente: un mini juego al azar que no se haya jugado en esta partida
+    const played = new Set(st.seq);
+    let pool = GAMES.map((g) => g.id).filter((id) => !played.has(id));
+    if (!pool.length) pool = GAMES.map((g) => g.id).filter((id) => id !== st.seq[st.seq.length - 1]);
+    this.start(pool[Math.floor(Math.random() * pool.length)]);
+  }
+
   toLobby() {
     clearTimeout(this.timer);
+    this.st.vr = null;
     clearInterval(this.liv);
     this.st.lg = null;
     this.st.rk = [];

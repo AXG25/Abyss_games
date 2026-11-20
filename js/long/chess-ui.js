@@ -1,10 +1,16 @@
 // ♟ Ajedrez — pantalla. Dibuja el estado `st.lg` del anfitrión, calcula aquí
 // mismo las jugadas legales para marcarlas y envía la jugada con ctx.act().
-import { posOf, legalMoves, inCheck, colorFor, current, colorOf, WHY } from './chess.js';
+//
+// Solo se repinta lo que cambió (antes los relojes se volvían a crear con cada
+// actualización de la sala y saltaban). Avisos de jaque, jaque mate, enroque,
+// coronación y captura al paso; la pieza comida vuela a la barra de quien la
+// comió. Contra el bot: nivel (fácil, normal, difícil) y botón de pista.
+import { posOf, legalMoves, inCheck, colorFor, current, colorOf, WHY, LEVELS, bestMove } from './chess.js';
 import { avatarSVG, validAvatar, icon } from '../icons.js';
 import { endPanel, endPanelHide } from './endpanel.js';
 import { esc, buzz } from '../util.js';
 import { sfx, isMuted, setMuted } from '../audio.js';
+import { makeFx, rectOf } from './fx.js';
 
 // Piezas propias (viewBox 50×50): base común + figura.
 const BASE = '<path d="M11 45.5h28a2 2 0 0 0 2-2v-1.5a3 3 0 0 0-3-3H12a3 3 0 0 0-3 3v1.5a2 2 0 0 0 2 2z"/>';
@@ -23,6 +29,33 @@ export function pieceSVG(p) {
 const NAME = { p: 'peón', n: 'caballo', b: 'alfil', r: 'torre', q: 'dama', k: 'rey' };
 const VAL = { p: 1, n: 3, b: 3, r: 5, q: 9, k: 0 };
 
+const LEVEL_NAME = { easy: 'Fácil', normal: 'Normal', hard: 'Difícil' };
+const mini = (p) => `<span class="cz-rp">${pieceSVG(p)}</span>`;
+const RULES = `
+  <h3>Cómo se juega</h3>
+  <p class="oc-goal">Gana quien le da <b>jaque mate</b> al rey rival: lo ataca y el rey no tiene cómo escapar.</p>
+  <h4>Cómo se mueve cada pieza</h4>
+  <div class="oc-pow cz-pow">
+    <div>${mini('K')}<p><b>Rey</b>Una casilla en cualquier dirección. Nunca puede quedar atacado.</p></div>
+    <div>${mini('Q')}<p><b>Dama</b>En línea recta o en diagonal, todas las casillas que quiera.</p></div>
+    <div>${mini('R')}<p><b>Torre</b>En línea recta (horizontal o vertical), todas las casillas que quiera.</p></div>
+    <div>${mini('B')}<p><b>Alfil</b>En diagonal, todas las casillas que quiera.</p></div>
+    <div>${mini('N')}<p><b>Caballo</b>En "L": dos casillas y una de lado. Es la única pieza que salta.</p></div>
+    <div>${mini('P')}<p><b>Peón</b>Avanza una casilla (dos en su primera jugada) y come en diagonal.</p></div>
+  </div>
+  <h4>Jugadas especiales</h4>
+  <ul>
+    <li><b>Enroque</b>: el rey se mueve dos casillas hacia una torre y la torre salta al otro lado. Solo si ninguno se ha movido, no hay piezas en medio y el rey no está ni pasa por jaque.</li>
+    <li><b>Coronación</b>: el peón que llega al final se convierte en dama, torre, alfil o caballo.</li>
+    <li><b>Captura al paso</b>: si un peón rival avanza dos casillas y queda al lado del tuyo, puedes comerlo como si hubiera avanzado una (solo en la jugada siguiente).</li>
+  </ul>
+  <h4>Tablas (empate)</h4>
+  <ul>
+    <li><b>Rey ahogado</b>: no tienes jugadas y tu rey no está en jaque.</li>
+    <li>Misma posición <b>tres veces</b>, <b>50 jugadas</b> sin comer ni mover peones, <b>material insuficiente</b> o <b>por acuerdo</b> (½ Ofrecer tablas).</li>
+  </ul>
+  <p class="oc-why"><b>Reloj</b>: 10 minutos por jugador y 3 s más por cada jugada. Pierde quien se queda sin tiempo o se desconecta más de 1 minuto en su turno. Toca una pieza para ver a dónde puede ir.</p>`;
+
 const fmt = (ms) => {
   const s = Math.max(0, Math.ceil(ms / 1000));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
@@ -36,19 +69,24 @@ export function mountChess(el, ctx) {
         <b class="oc-title">Ajedrez</b>
         <span class="oc-tools">
           <button class="btn ghost sm oc-end-btn" id="cz-stop" hidden>Terminar</button>
+          <button class="mute oc-help-btn" id="cz-help" aria-label="Reglas">?</button>
           <button class="mute" id="cz-mute">${icon(isMuted() ? 'soundOff' : 'soundOn')}</button>
         </span>
       </header>
       <div class="cz-bar" id="cz-top"></div>
-      <div class="cz-wrap"><div class="cz-board"></div></div>
+      <div class="cz-wrap"><div class="cz-board"></div><div class="oc-toasts"></div></div>
       <div class="cz-bar" id="cz-bot"></div>
       <div class="cz-msg"></div>
       <div class="cz-offer" hidden></div>
       <div class="cz-moves"></div>
       <div class="cz-actions">
+        <button class="btn ghost sm" id="cz-hint" hidden>💡 Pista</button>
         <button class="btn ghost sm" id="cz-draw">½ Ofrecer tablas</button>
         <button class="btn ghost sm" id="cz-resign">${icon('flag')} Rendirse</button>
       </div>
+      <div class="cz-level" hidden><span>Bot:</span>${LEVELS.map((v) => `<button data-lv="${v}">${LEVEL_NAME[v]}</button>`).join('')}</div>
+      <div class="oc-fly"></div>
+      <div class="oc-pick cz-help" hidden><div class="oc-pick-box oc-rules">${RULES}<button class="btn primary" id="cz-help-x">¡Entendido!</button></div></div>
       <div class="oc-pick cz-promo" hidden>
         <div class="oc-pick-box">
           <p>¿En qué se convierte tu peón?</p>
@@ -61,7 +99,8 @@ export function mountChess(el, ctx) {
   const $ = (s) => el.querySelector(s);
   const boardEl = $('.cz-board'), topEl = $('#cz-top'), botEl = $('#cz-bot'), msgEl = $('.cz-msg');
   const offerEl = $('.cz-offer'), movesEl = $('.cz-moves'), promoEl = $('.cz-promo'), endEl = $('.oc-end');
-  const drawBtn = $('#cz-draw'), resignBtn = $('#cz-resign');
+  const drawBtn = $('#cz-draw'), resignBtn = $('#cz-resign'), hintBtn = $('#cz-hint'), levelEl = $('.cz-level'), helpEl = $('.cz-help');
+  const wrapEl = $('.cz-wrap'), toastsEl = $('.oc-toasts');
 
   let st = null, lg = null, pos = null, legal = [];
   let sel = -1;               // casilla elegida
@@ -70,11 +109,18 @@ export function mountChess(el, ctx) {
   let seenTn = 0, tnAt = Date.now();
   let lastEvKey = '';
   let lastLast = '';
+  let lastSig = '', sBars = '', sMoves = '', sOffer = '', msgCur = '', endKey = '';
+  let hint = null;            // jugada sugerida { f, t } (se ve unos segundos)
   let dead = false;
+  const timers = new Set();
+  const later = (fn, ms) => { const t = setTimeout(() => { timers.delete(t); if (!dead) fn(); }, ms); timers.add(t); };
+  const FX = makeFx($('.oc-fly'), later);
 
   $('#cz-leave').onclick = () => ctx.leave();
   $('#cz-mute').onclick = () => { setMuted(!isMuted()); $('#cz-mute').innerHTML = icon(isMuted() ? 'soundOff' : 'soundOn'); };
   $('#cz-stop').onclick = () => { if (confirm('¿Terminar la partida y volver a la sala?')) ctx.lobby(); };
+  $('#cz-help').onclick = () => { helpEl.hidden = false; };
+  helpEl.onclick = (e) => { if (e.target === helpEl || e.target.closest('#cz-help-x')) helpEl.hidden = true; };
 
   const me = () => ctx.me;
   const myCol = () => (lg ? colorFor(lg, me()) : null);
@@ -90,6 +136,18 @@ export function mountChess(el, ctx) {
   };
 
   drawBtn.onclick = () => { if (confirm('¿Ofrecer tablas a tu rival?')) send({ t: 'offer' }, false); };
+  levelEl.onclick = (e) => { const b = e.target.closest('[data-lv]'); if (b && lg && b.dataset.lv !== lg.lvl) { sfx.click(); send({ t: 'level', v: b.dataset.lv }, false); } };
+  // pista: la mejor jugada que encuentra el mismo motor del bot (pensando poco)
+  hintBtn.onclick = () => {
+    if (!myTurn() || busy()) return;
+    const m = bestMove(pos, 2, () => 0, 400);
+    if (!m) return;
+    hint = { f: m.f, t: m.t };
+    sfx.ready();
+    paintBoard();
+    const seen = hint;
+    later(() => { if (hint === seen) { hint = null; paintBoard(); } }, 4000);
+  };
   resignBtn.onclick = () => { if (confirm('¿Seguro que te rindes?')) send({ t: 'resign' }, false); };
   offerEl.onclick = (e) => {
     const b = e.target.closest('[data-a]');
@@ -161,6 +219,7 @@ export function mountChess(el, ctx) {
       d.classList.toggle('dot', dests.has(i) && p === '.');
       d.classList.toggle('hit', dests.has(i) && p !== '.');
       d.classList.toggle('can', movable.has(i));
+      d.classList.toggle('hint', !!hint && myTurn() && (hint.f === i || hint.t === i));
       let pc = d.querySelector('.cz-p');
       const want = p === '.' ? '' : p;
       if ((pc ? pc.dataset.k : '') !== want) {
@@ -207,48 +266,67 @@ export function mountChess(el, ctx) {
         <span class="cz-nm"><b>${id === me() ? 'Tú' : esc(p.n)}${p.b ? ' <i>bot</i>' : ''}</b><small><i class="cz-dotc ${col}"></i>${col === 'w' ? 'Blancas' : 'Negras'}${lg.wins[id] ? ` · ${icon('trophy')}${lg.wins[id]}` : ''}</small></span>
       </span>
       ${capturedHTML(col)}
-      <span class="cz-clk ${turn ? 'run' : ''}" data-c="${col}">${fmt(lg.clk[col])}</span>`;
+      <span class="cz-clk ${turn ? 'run' : ''}" data-c="${col}">${fmt(clockLeft(col))}</span>`;
   }
+  // tiempo que le queda a un color ahora mismo (cada teléfono cuenta desde que vio el turno)
+  const clockLeft = (col) => lg.clk[col] - (!lg.end && lg.moves.length >= 2 && col === lg.turn ? Date.now() - tnAt : 0);
 
+  // las barras se rehacen solo si cambia algo que se ve (no los segundos del reloj)
   function paintBars() {
     const mine = myCol();
     const bottom = mine ? me() : lg.order[0];
     const topId = lg.order.find((id) => id !== bottom);
+    const sig = JSON.stringify([lg.order.map((id) => { const p = player(id); return [id, p.n, p.a, p.b, p.off, ctx.colorOf(id), lg.wins[id]]; }), lg.turn, lg.end, lg.capt, lg.clk, bottom]);
+    if (sig === sBars) return;
+    sBars = sig;
     topEl.innerHTML = barHTML(topId);
     botEl.innerHTML = barHTML(bottom);
   }
 
   function paintMsg() {
     const ck = inCheck(pos);
-    if (lg.end) msgEl.innerHTML = `<b class="warn">${lg.why === 'mate' ? '¡Jaque mate!' : WHY[lg.why] || 'Fin'}</b> · ${lg.win ? (lg.win === me() ? '¡Ganaste!' : `Ganó ${esc(player(lg.win).n)}`) : 'Tablas'}`;
-    else if (myTurn()) msgEl.innerHTML = ck ? '<b class="warn">¡Jaque! Protege a tu rey</b>' : '<b>Tu turno</b>: toca una pieza y luego a dónde va';
-    else if (myCol()) msgEl.innerHTML = `${ck ? '<b class="warn">¡Jaque!</b> ' : ''}Turno de <b style="color:${ctx.colorOf(current(lg))}">${esc(player(current(lg)).n)}</b>`;
-    else msgEl.innerHTML = `Mueven las ${lg.turn === 'w' ? 'blancas' : 'negras'}${ck ? ' · <b class="warn">¡Jaque!</b>' : ''}`;
+    let h;
+    if (lg.end) h = `<b class="warn">${lg.why === 'mate' ? '¡Jaque mate!' : WHY[lg.why] || 'Fin'}</b> · ${lg.win ? (lg.win === me() ? '¡Ganaste!' : `Ganó ${esc(player(lg.win).n)}`) : 'Tablas'}`;
+    else if (myTurn()) h = ck ? '<b class="warn">¡Jaque! Protege a tu rey</b>' : '<b>Tu turno</b>: toca una pieza y luego a dónde va';
+    else if (myCol()) h = `${ck ? '<b class="warn">¡Jaque!</b> ' : ''}Turno de <b style="color:${ctx.colorOf(current(lg))}">${esc(player(current(lg)).n)}</b>${player(current(lg)).b ? ' (pensando…)' : ''}`;
+    else h = `Mueven las ${lg.turn === 'w' ? 'blancas' : 'negras'}${ck ? ' · <b class="warn">¡Jaque!</b>' : ''}`;
+    if (h !== msgCur) { msgCur = h; msgEl.innerHTML = h; }
     msgEl.classList.toggle('mine', myTurn());
     // jugadas en parejas: 1. e4 e5 2. Cf3 …
-    const rows = [];
-    for (let i = 0; i < lg.moves.length; i += 2) rows.push(`<span><i>${i / 2 + 1}.</i> ${esc(lg.moves[i])} ${esc(lg.moves[i + 1] || '')}</span>`);
-    movesEl.innerHTML = rows.length ? rows.join('') : '<span class="hint">Las blancas empiezan</span>';
-    movesEl.scrollLeft = movesEl.scrollWidth;
+    if (sMoves !== String(lg.moves.length)) {
+      sMoves = String(lg.moves.length);
+      const rows = [];
+      for (let i = 0; i < lg.moves.length; i += 2) rows.push(`<span><i>${i / 2 + 1}.</i> ${esc(lg.moves[i])} ${esc(lg.moves[i + 1] || '')}</span>`);
+      movesEl.innerHTML = rows.length ? rows.join('') : '<span class="hint">Las blancas empiezan</span>';
+      movesEl.scrollLeft = movesEl.scrollWidth;
+    }
     // oferta de tablas
     const col = myCol();
-    if (!lg.end && lg.offer && col && lg.offer !== col) {
-      offerEl.hidden = false;
-      offerEl.innerHTML = `<span>${esc(player(rival()).n)} ofrece <b>tablas</b></span><button class="btn sm primary" data-a="draw-yes">Aceptar</button><button class="btn sm ghost" data-a="draw-no">Rechazar</button>`;
-    } else if (!lg.end && lg.offer && lg.offer === col) {
-      offerEl.hidden = false;
-      offerEl.innerHTML = '<span>Ofreciste tablas: esperando respuesta…</span>';
-    } else offerEl.hidden = true;
+    const ok = !lg.end && lg.offer && col ? (lg.offer !== col ? 'them' : 'me') : '';
+    if (ok !== sOffer) {
+      sOffer = ok;
+      offerEl.hidden = !ok;
+      if (ok === 'them') offerEl.innerHTML = `<span>${esc(player(rival()).n)} ofrece <b>tablas</b></span><button class="btn sm primary" data-a="draw-yes">Aceptar</button><button class="btn sm ghost" data-a="draw-no">Rechazar</button>`;
+      else if (ok === 'me') offerEl.innerHTML = '<span>Ofreciste tablas: esperando respuesta…</span>';
+    }
     const playing = !lg.end && !!col;
     $('.cz-actions').hidden = !playing;
-    const vsBot = player(rival()).b;
+    const vsBot = !!player(rival()).b;
     drawBtn.disabled = !playing || !!lg.offer || lg.offerPly === lg.moves.length || vsBot;
     drawBtn.hidden = vsBot;
+    // contra el bot: pista y nivel
+    hintBtn.hidden = !vsBot || !playing;
+    hintBtn.disabled = !myTurn() || !!busy();
+    levelEl.hidden = !vsBot || !playing;
+    levelEl.querySelectorAll('[data-lv]').forEach((b) => b.classList.toggle('on', b.dataset.lv === (lg.lvl || 'normal')));
     $('#cz-stop').hidden = !ctx.isHost() || lg.end;
   }
 
   function paintEnd() {
-    if (!lg.end) { endPanelHide(endEl); return; }
+    if (!lg.end) { endKey = ''; endPanelHide(endEl); return; }
+    const key = `${lg.tn}:${lg.why}`;
+    if (key === endKey) { endPanel(endEl, key, 2800); return; }
+    endKey = key;
     const won = lg.win === me();
     const title = lg.win ? (won ? '¡Ganaste!' : `¡Ganó ${esc(player(lg.win).n)}!`) : 'Tablas';
     
@@ -270,34 +348,53 @@ export function mountChess(el, ctx) {
     endPanel(endEl, `${lg.tn}:${lg.why}`, 2800);
   }
 
-  function sounds() {
-    const ev = lg.ev;
-    const key = JSON.stringify([ev, lg.end, lg.win]);
-    if (key === lastEvKey) return;
-    const first = lastEvKey === '';
-    lastEvKey = key;
-    if (first) return;
+  const splash = (spec) => FX.splash(wrapEl, spec);
+  const toast = (html, color, cls = '') => FX.toast(toastsEl, html, color, cls);
+  const PNAME = { q: 'dama', r: 'torre', b: 'alfil', n: 'caballo', p: 'peón' };
+
+  // jugada nueva: sonidos, avisos y la pieza comida vuela a la barra de quien la comió
+  function onEvent(ev, capFrom) {
+    const mine = ev.p === me();
+    const col = ctx.colorOf(ev.p);
+    const who = mine ? 'Tú' : esc(player(ev.p).n);
     if (lg.end) {
+      later(() => {
+        if (lg.why === 'mate') splash({ cls: 'mate', art: `<span class="cz-sp">${pieceSVG(colorFor(lg, lg.win) === 'w' ? 'k' : 'K')}</span>`, title: '¡Jaque mate!', sub: lg.win === me() ? '¡Ganaste!' : `Ganó <b>${esc(player(lg.win).n)}</b>`, color: ctx.colorOf(lg.win) });
+        else if (!lg.win) splash({ art: '<span class="num">½</span>', title: 'Tablas', sub: WHY[lg.why] || '', color: '#9d8df1' });
+        else splash({ art: icon('trophy'), title: lg.win === me() ? '¡Ganaste!' : `Ganó ${esc(player(lg.win).n)}`, sub: WHY[lg.why] || '', color: ctx.colorOf(lg.win) });
+      }, ev.t === 'move' ? 300 : 0);
       if (lg.win === me()) sfx.win(); else if (lg.win) sfx.out(0.6); else sfx.bell();
-      return;
     }
-    if (!ev) return;
     if (ev.t === 'move') {
-      if (ev.s.includes('+')) { sfx.warn(); if (myTurn()) buzz(120); }
+      if (ev.castle) { sfx.click(1.2); later(() => sfx.click(1), 120); toast(`${who} ${mine ? 'te enrocaste' : 'se enrocó'} (${ev.s === 'O-O' ? 'corto' : 'largo'})`, col); }
+      else if (ev.promo) { sfx.big(); if (!lg.end) splash({ cls: 'suit', who: `${who} ${mine ? 'coronaste' : 'coronó'} un peón`, art: `<span class="cz-sp">${pieceSVG(colorFor(lg, ev.p) === 'w' ? 'P' : 'p')}</span><span class="arr">→</span><span class="cz-sp new">${pieceSVG(colorFor(lg, ev.p) === 'w' ? ev.promo.toUpperCase() : ev.promo)}</span>`, title: '¡Coronación!', sub: `El peón ahora es <b>${PNAME[ev.promo]}</b>`, color: col }); }
       else if (ev.cap) sfx.thud(1.2);
       else sfx.click(1.4);
+      if (ev.ep) toast('¡Captura <b>al paso</b>!', col);
+      if (ev.cap && ev.capP && capFrom) {
+        // la pieza comida vuela a la barra de quien la comió
+        const bar = colorFor(lg, ev.p) === colorFor(lg, me()) || (!myCol() && colorFor(lg, ev.p) === 'w') ? botEl : topEl;
+        const capCol = colorFor(lg, ev.p) === 'w' ? ev.capP : ev.capP.toUpperCase();
+        FX.fly(capFrom, rectOf(bar.querySelector('.cz-caps') || bar), { html: pieceSVG(capCol), w: 40, h: 40, s1: 0.45, dur: 520 });
+      }
+      if (ev.check && !lg.end) {
+        sfx.warn();
+        splash({ cls: 'skip', art: `<span class="cz-sp">${pieceSVG(lg.turn === 'w' ? 'K' : 'k')}</span>`, title: '¡Jaque!', sub: lg.turn === colorFor(lg, me()) ? 'Protege a tu rey' : `${who} ${mine ? 'diste' : 'dio'} jaque`, color: col });
+        if (myTurn()) buzz(120);
+      }
       if (myTurn()) buzz(30);
-    } else if (ev.t === 'offer' && ev.p !== me()) { sfx.bell(); buzz(60); }
+    } else if (ev.t === 'offer' && ev.p !== me()) { sfx.bell(); buzz(60); toast(`<b>${esc(player(ev.p).n)}</b> ofrece tablas`, col); }
+    else if (ev.t === 'decline' && ev.p !== me()) toast(`<b>${esc(player(ev.p).n)}</b> rechazó las tablas`, col);
+    else if (ev.t === 'level') toast(`Bot: <b>${LEVEL_NAME[ev.v]}</b>`, '#9d8df1');
   }
 
   // relojes: cada teléfono cuenta desde que vio el turno nuevo (el anfitrión manda)
   const iv = setInterval(() => {
     if (dead || !lg || lg.end) return;
-    const on = lg.moves.length >= 2;
     el.querySelectorAll('.cz-clk').forEach((c) => {
-      const col = c.dataset.c;
-      const ms = lg.clk[col] - (on && col === lg.turn ? Date.now() - tnAt : 0);
-      c.textContent = fmt(ms);
+      const ms = clockLeft(c.dataset.c);
+      const t = fmt(ms);
+      if (c.textContent !== t) c.textContent = t;
       c.classList.toggle('low', ms < 30000);
     });
     if (pending && Date.now() - pendingAt > 3000) { pending = 0; paintBoard(); }
@@ -306,20 +403,29 @@ export function mountChess(el, ctx) {
   return {
     update(nst) {
       st = nst;
+      if (!nst.lg) return;
+      // nada cambió (llega muy seguido: cada vez que alguien de la sala actualiza su presencia)
+      const sig = JSON.stringify([nst.lg, nst.pl]);
+      if (sig === lastSig) return;
+      lastSig = sig;
       lg = nst.lg;
-      if (!lg) return;
-      if (lg.tn !== seenTn) { seenTn = lg.tn; tnAt = Date.now(); sel = -1; }
+      if (lg.tn !== seenTn) { seenTn = lg.tn; tnAt = Date.now(); sel = -1; hint = null; }
       if (pending && lg.tn !== pending) pending = 0;
       pos = posOf(lg);
       legal = lg.end ? [] : legalMoves(pos);
       if (lastLast === '') lastLast = 'init';
-      sounds();
+      const evKey = JSON.stringify([lg.ev, lg.end, lg.win]);
+      const fresh = evKey !== lastEvKey && lastEvKey !== '' ? lg.ev : null;
+      lastEvKey = evKey;
+      // casilla de la pieza comida (antes de repintar), para que vuele a la barra
+      const capFrom = fresh && fresh.t === 'move' && fresh.cap && sqEl.length ? rectOf(sqEl[fresh.ep ? (fresh.f & ~7) | (fresh.to & 7) : fresh.to]) : null;
       paintBoard();
       paintBars();
       paintMsg();
       paintEnd();
+      if (fresh) onEvent(fresh, capFrom);
     },
-    destroy() { dead = true; clearInterval(iv); },
+    destroy() { dead = true; clearInterval(iv); timers.forEach((t) => clearTimeout(t)); },
   };
 }
 

@@ -231,6 +231,7 @@ export function init(ids, seed, prevWins = {}, prev = null) {
     ev: null,
     win: null, end: false, why: null,
     wins, draws: (prev && prev.draws) || 0,
+    lvl: (prev && prev.lvl) || 'normal',   // nivel del bot: easy · normal · hard (se queda para la revancha)
   };
 }
 
@@ -253,11 +254,18 @@ function finish(lg, winner, why) {
 //   { t: 'resign' }           rendirse
 //   { t: 'offer' }            ofrecer tablas
 //   { t: 'draw-yes' } / { t: 'draw-no' }  responder a la oferta
+//   { t: 'level', v }         nivel del bot (easy · normal · hard)
 export function act(lg, pid, a, info = {}) {
   if (!a || lg.end) return false;
   const col = colorFor(lg, pid);
   if (!col) return false;
   if (a.t === 'resign') { finish(lg, lg.order[col === 'w' ? 1 : 0], 'resign'); return true; }
+  if (a.t === 'level') {
+    if (!LEVELS.includes(a.v) || a.v === lg.lvl) return false;
+    lg.lvl = a.v;
+    lg.ev = { t: 'level', p: pid, v: a.v, n: lg.moves.length };
+    return true;
+  }
   if (a.t === 'offer') {
     if (lg.offer || lg.offerPly === lg.moves.length) return false;
     lg.offer = col;
@@ -296,7 +304,8 @@ export function act(lg, pid, a, info = {}) {
   const key = keyOf(n);
   lg.hist.push(key);
   lg.offer = null;
-  lg.ev = { t: 'move', p: pid, s, cap: n.capt ? 1 : 0, n: lg.moves.length };
+  // para los avisos: pieza comida, enroque, coronación, captura al paso y jaque
+  lg.ev = { t: 'move', p: pid, s, cap: n.capt ? 1 : 0, capP: n.capt ? n.capt.toLowerCase() : null, castle: m.c ? 1 : 0, promo: m.p || null, ep: m.ep ? 1 : 0, check: inCheck(n) ? 1 : 0, f: m.f, to: m.t, n: lg.moves.length };
   lg.tn++;
   // ¿se terminó?
   const replies = legalMoves(n);
@@ -364,7 +373,13 @@ const order = (pos, ms) => ms
   .sort((a, b) => b.k - a.k)
   .map((x) => x.m);
 
+// Tiempo máximo para pensar: se corta la búsqueda y se usa la última profundidad completa.
+let stopAt = Infinity, nodes = 0;
+const STOP = { stop: true };
+const tick = () => { if ((++nodes & 511) === 0 && Date.now() > stopAt) throw STOP; };
+
 function quiesce(pos, alpha, beta, d) {
+  tick();
   const stand = evaluate(pos);
   if (stand >= beta || d <= 0) return stand;
   if (stand > alpha) alpha = stand;
@@ -378,6 +393,7 @@ function quiesce(pos, alpha, beta, d) {
 }
 
 function search(pos, depth, alpha, beta, ply) {
+  tick();
   const ms = legalMoves(pos);
   if (!ms.length) return inCheck(pos) ? -MATE + ply : 0;
   if (depth <= 0) return quiesce(pos, alpha, beta, 4);
@@ -391,21 +407,41 @@ function search(pos, depth, alpha, beta, ply) {
   return best;
 }
 
-export function bestMove(pos, depth = 2, rnd = Math.random) {
+// Mejor jugada: piensa 1, 2, … hasta `depth` jugadas y se queda con la última
+// profundidad que alcanzó a terminar dentro de `budget` ms (así nunca se demora).
+export function bestMove(pos, depth = 2, rnd = Math.random, budget = 700) {
   const ms = legalMoves(pos);
   if (!ms.length) return null;
-  let best = null, bs = -Infinity;
-  for (const m of order(pos, ms)) {
-    const sc = -search(play(pos, m), depth - 1, -Infinity, Infinity, 1) + rnd() * 18;
-    if (sc > bs) { bs = sc; best = m; }
+  const sorted = order(pos, ms);
+  let done = sorted[0];
+  stopAt = Date.now() + budget;
+  nodes = 0;
+  try {
+    for (let d = 1; d <= depth; d++) {
+      let best = null, bs = -Infinity;
+      for (const m of sorted) {
+        const sc = -search(play(pos, m), d - 1, -Infinity, Infinity, 1) + rnd() * 18;
+        if (sc > bs) { bs = sc; best = m; }
+      }
+      done = best;
+    }
+  } catch (e) {
+    if (e !== STOP) throw e;
+  } finally {
+    stopAt = Infinity;
   }
-  return best;
+  return done;
 }
 
+export const LEVELS = ['easy', 'normal', 'hard'];
+// nivel del bot: fácil (mira 1 jugada y se equivoca seguido), normal (2; 3 con
+// pocas piezas) y difícil (siempre 3, sin errores al azar)
 export function autoMove(lg) {
   const pos = posOf(lg);
-  // con pocas piezas piensa una jugada más
   const pieces = lg.b.replace(/\./g, '').length;
-  const m = bestMove(pos, pieces <= 10 ? 3 : 2);
+  const lvl = lg.lvl || 'normal';
+  const m = lvl === 'easy' ? bestMove(pos, 1, () => Math.random() * 9)
+    : lvl === 'hard' ? bestMove(pos, 3, () => Math.random() * 0.4)
+      : bestMove(pos, pieces <= 10 ? 3 : 2);
   return m ? { t: 'move', f: m.f, to: m.t, p: m.p } : { t: 'resign' };
 }

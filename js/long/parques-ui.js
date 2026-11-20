@@ -9,17 +9,26 @@ import { HOME, LAST_TRACK, TURN_MS, OFF_TURN_MS, current, absOf, onTrack, canMov
 import { avatarSVG, validAvatar, icon } from '../icons.js';
 import { endPanel, endPanelHide } from './endpanel.js';
 import { esc, buzz } from '../util.js';
-import { sfx, isMuted, setMuted } from '../audio.js';
+import { sfx, isMuted, setMuted, music, stopMusic } from '../audio.js';
 
 const NS = 'http://www.w3.org/2000/svg';
 const f = (n) => Math.round(n * 1000) / 1000;
 
-// ---- geometría (unidades = casillas; centro del tablero en 9.5, 9.5)
+// ---- geometría. Tablero de 20×20 con el centro en (10, 10). Cada brazo tiene 3
+// columnas anchas (CW) y 8 filas cortas (RL): casillas grandes y cárceles más
+// pequeñas en las esquinas. Las casillas son anchas en los brazos de arriba y
+// abajo y altas en los de los lados.
+const C = 10, CW = 1.8, RL = 0.875, HALF = 1.5 * CW;
+const row = (r) => C + HALF + RL * (r + 0.5);   // fila r del brazo de abajo (0 junto al cielo … 7 en el borde)
 // rotP gira k cuartos de vuelta alrededor del centro (en pantalla, contra las manecillas)
-const rotP = (x, y, k) => { k = ((k % 4) + 4) % 4; for (let i = 0; i < k; i++) [x, y] = [y, 19 - x]; return [x, y]; };
+const rotP = (x, y, k) => { k = ((k % 4) + 4) % 4; for (let i = 0; i < k; i++) [x, y] = [y, 2 * C - x]; return [x, y]; };
 // lado del asiento 0 (brazo de abajo): baja por la izquierda, cruza y sube por la derecha
-const baseTrack = (i) => (i < 8 ? [8.5, 11.5 + i] : i === 8 ? [9.5, 18.5] : [10.5, 18.5 - (i - 9)]);
-const JC = 15;   // centro de la cárcel del asiento 0 (esquina de abajo a la derecha)
+const baseTrack = (i) => (i < 8 ? [C - CW, row(i)] : i === 8 ? [C, row(7)] : [C + CW, row(16 - i)]);
+const baseHome = (j) => [C, row(6 - j)];        // llegada (columna del medio, hacia el cielo)
+const JS = 5.6;                                  // lado de la cárcel
+const JC = row(4);                               // centro de la cárcel del asiento 0 (a la altura de su salida)
+const wideK = (k) => ((k % 2) + 2) % 2 === 0;    // ¿la casilla es ancha (brazo de arriba o abajo)?
+const cellWH = (k) => (wideK(k) ? [CW - 0.1, RL - 0.09] : [RL - 0.09, CW - 0.1]);
 
 // ---- colores
 const hex = (c) => (/^#[0-9a-f]{6}$/i.test(c || '') ? c : '#6c5f96');
@@ -34,10 +43,13 @@ const GREY = '#6c5f96';
 // ---- formas
 const STAR = (() => { let d = ''; for (let k = 0; k < 10; k++) { const a = -Math.PI / 2 + (k * Math.PI) / 5, r = k % 2 ? 0.45 : 1; d += (k ? 'L' : 'M') + f(Math.cos(a) * r) + ' ' + f(Math.sin(a) * r); } return d + 'Z'; })();
 const star = (x, y, r, fill, stroke) => `<path d="${STAR}" transform="translate(${f(x)} ${f(y)}) scale(${r})" fill="${fill}" stroke="${stroke}" stroke-width="${f(0.05 / r)}" stroke-linejoin="round"/>`;
-const chevron = (x, y, k, color) => `<path d="M-.2 .1L0-.1L.2 .1" transform="translate(${f(x)} ${f(y)}) rotate(${-90 * k})" fill="none" stroke="${color}" stroke-width=".09" stroke-linecap="round" stroke-linejoin="round"/>`;
-// casilla con relieve: sombra corrida hacia abajo + cara
-const cell = (x, y, fill) => `<rect x="${f(x - 0.46)}" y="${f(y - 0.39)}" width=".92" height=".92" rx=".17" fill="#0b0520" opacity=".6"/>`
-  + `<rect x="${f(x - 0.46)}" y="${f(y - 0.47)}" width=".92" height=".92" rx=".17" fill="${fill}" stroke="rgba(23,12,51,.32)" stroke-width=".035"/>`;
+const chevron = (x, y, k, color) => `<path d="M-.26 .12L0-.13L.26 .12" transform="translate(${f(x)} ${f(y)}) rotate(${-90 * k})" fill="none" stroke="${color}" stroke-width=".1" stroke-linecap="round" stroke-linejoin="round"/>`;
+// casilla con relieve: sombra corrida hacia abajo + cara (k: cuartos de vuelta de su brazo)
+const cell = (x, y, fill, k) => {
+  const [w, h] = cellWH(k);
+  return `<rect x="${f(x - w / 2)}" y="${f(y - h / 2 + 0.07)}" width="${f(w)}" height="${f(h)}" rx=".17" fill="#0b0520" opacity=".6"/>`
+    + `<rect x="${f(x - w / 2)}" y="${f(y - h / 2)}" width="${f(w)}" height="${f(h)}" rx=".17" fill="${fill}" stroke="rgba(23,12,51,.32)" stroke-width=".035"/>`;
+};
 // peón (de lado, con la base en y≈.3 y la cabeza en y≈-.43)
 const PAWN = 'M-.3 .2L-.3 .23C-.3 .33 .3 .33 .3 .23L.3 .2C.3 .15 .24 .13 .19 .12C.12 .08 .08 0 .085-.09L-.085-.09C-.08 0-.12 .08-.19 .12C-.24 .13-.3 .15-.3 .2Z';
 const LOCK = '<rect x="-.085" y="-.02" width=".17" height=".13" rx=".025" fill="#fff"/><path d="M-.052-.02v-.04a.052 .052 0 0 1 .104 0v.04" fill="none" stroke="#fff" stroke-width=".035"/>';
@@ -51,15 +63,21 @@ const dieHTML = (d) => `<button class="pq-die idle" data-d="${d}" aria-label="Da
   [1, 2, 3, 4, 5, 6].map((n) => `<span class="pq-face f${n}">${PIPS[n].map(([x, y]) => `<i style="grid-area:${y + 1}/${x + 1}"></i>`).join('')}</span>`).join('')
 }<b class="pq-core"></b><b class="pq-core c2"></b><b class="pq-core c3"></b></span></span></button>`;
 
-// fichas que comparten casilla: posición y tamaño
-const OFFS = {
-  1: [[0, 0]],
-  2: [[-0.2, 0.03], [0.2, -0.03]],
-  3: [[0, -0.13], [-0.21, 0.12], [0.21, 0.12]],
-  4: [[-0.2, -0.13], [0.2, -0.13], [-0.2, 0.15], [0.2, 0.15]],
-};
-const offsOf = (n) => OFFS[n] || Array.from({ length: n }, (_, k) => [((k % 3) - 1) * 0.28, (Math.floor(k / 3) - (Math.ceil(n / 3) - 1) / 2) * 0.26]);
-const scaleOf = (n) => (n <= 1 ? 1 : n === 2 ? 0.8 : n <= 4 ? 0.66 : 0.52);
+// fichas que comparten casilla: se reparten a lo largo de la casilla (de lado en las
+// anchas, una detrás de otra en las altas) y se achican un poco si son muchas
+const SC = [1.25, 1.25, 1.1, 0.9, 0.78];
+function layoutOf(n, wide) {
+  if (n <= 1) return { sc: SC[1], offs: [[0, 0]] };
+  if (n <= 4) {
+    const gap = n === 2 ? 0.84 : n === 3 ? 0.56 : 0.42;
+    const offs = Array.from({ length: n }, (_, k) => { const a = (k - (n - 1) / 2) * gap; return wide ? [a, (k % 2 ? 0.03 : -0.03)] : [(k % 2 ? 0.03 : -0.03), a]; });
+    return { sc: SC[n], offs };
+  }
+  // muchas (en un seguro): dos filas
+  const per = Math.ceil(n / 2);
+  const offs = Array.from({ length: n }, (_, k) => { const a = ((k % per) - (per - 1) / 2) * (1.4 / Math.max(1, per - 1)); const b = Math.floor(k / per) ? 0.18 : -0.18; return wide ? [a, b] : [b, a]; });
+  return { sc: 0.6, offs };
+}
 
 const RULES = `
   <h3>Cómo se juega</h3>
@@ -70,6 +88,8 @@ const RULES = `
     <li>Si caes donde hay una ficha rival, <b>te la comes</b>: vuelve a su cárcel. En los <b>seguros</b> (★) y las salidas nadie se come… salvo quien sale de la cárcel, que se come a los que estén en su salida.</li>
     <li><b>Pares</b> = vuelves a lanzar. <b>Tres pares seguidos</b>: eliges una ficha y se corona directo en el cielo.</li>
     <li>Al dar la vuelta entras a tu <b>llegada</b> (tu color) y al <b>cielo</b>. Para coronar necesitas el número exacto.</li>
+    <li><b>Premio</b>: si te comes una ficha o metes una en el cielo, <b>vuelves a lanzar</b>. Puedes usar los dados que te queden y luego lanzar, o tocar <b>Lanzar ya</b> y perder los que quedaban.</li>
+    <li>Máximo <b>dos fichas</b> del mismo color por casilla, salvo en los seguros y las salidas.</li>
     <li>Si un dado no se puede usar, se pierde. Gana quien corone sus <b>4 fichas</b>.</li>
     <li>Tienes 30 s por jugada; si se acaban, la máquina juega por ti.</li>
   </ul>`;
@@ -79,6 +99,7 @@ const WHY = {
   home: 'Esa ficha ya llegó al cielo',
   exact: 'Al cielo se entra con el <b>número exacto</b>',
   block: '¡<b>Bloqueo</b>! Por ahí no puede pasar',
+  full: 'Ya hay <b>dos</b> fichas tuyas ahí (solo en seguros caben más)',
 };
 
 export function mountParques(el, ctx) {
@@ -95,8 +116,8 @@ export function mountParques(el, ctx) {
       </header>
       <div class="pq-players"></div>
       <div class="pq-wrap">
-        <svg class="pq-bg" viewBox="-0.5 -0.5 20 20" aria-hidden="true"></svg>
-        <svg class="pq-fg" viewBox="-0.5 -0.5 20 20"><defs></defs><g class="pq-marks"></g><g class="pq-pcs"></g><g class="pq-walls"></g><g class="pq-fx"></g></svg>
+        <svg class="pq-bg" viewBox="0 0 20 20" aria-hidden="true"></svg>
+        <svg class="pq-fg" viewBox="0 0 20 20"><defs></defs><g class="pq-marks"></g><g class="pq-pcs"></g><g class="pq-walls"></g><g class="pq-fx"></g></svg>
       </div>
       <div class="oc-log pq-log"></div>
       <div class="oc-msg pq-msg"></div>
@@ -105,6 +126,7 @@ export function mountParques(el, ctx) {
         <div class="pq-btns">
           <button class="btn big primary" id="pq-roll" hidden>Lanzar dados</button>
           <button class="btn primary" id="pq-exit" hidden></button>
+          <button class="btn pq-reroll" id="pq-reroll" hidden></button>
         </div>
       </div>
       <div class="oc-timer mine pq-mytimer"><i></i></div>
@@ -112,9 +134,10 @@ export function mountParques(el, ctx) {
       <div class="oc-end" hidden></div>
     </section>`;
   const $ = (s) => el.querySelector(s);
+  music('calm');   // música suave de fondo (el botón de sonido la apaga junto con los efectos)
   const bgSvg = $('.pq-bg'), fgDefs = $('.pq-fg defs'), marksG = $('.pq-marks'), pcsG = $('.pq-pcs'), wallsG = $('.pq-walls'), fxG = $('.pq-fx');
   const wrapEl = $('.pq-wrap'), playersEl = $('.pq-players'), logEl = $('.pq-log'), msgEl = $('.pq-msg'), trayEl = $('.pq-tray');
-  const rollBtn = $('#pq-roll'), exitBtn = $('#pq-exit'), endEl = $('.oc-end'), helpEl = $('.pq-help'), myTimer = $('.pq-mytimer'), stopBtn = $('#pq-stop');
+  const rollBtn = $('#pq-roll'), exitBtn = $('#pq-exit'), rerollBtn = $('#pq-reroll'), endEl = $('.oc-end'), helpEl = $('.pq-help'), myTimer = $('.pq-mytimer'), stopBtn = $('#pq-stop');
 
   let st = null, lg = null;
   let mySeat = 0;
@@ -163,9 +186,9 @@ export function mountParques(el, ctx) {
   // ---- geometría en pantalla (ya girada para que mi cárcel quede abajo)
   const q = (s) => s - mySeat;
   const trackV = (abs) => rotP(...baseTrack(abs % 17), Math.floor(abs / 17) - mySeat);
-  const homeV = (s, j) => rotP(9.5, 17.5 - j, q(s));
-  const cieloV = (s, i) => rotP(8.75 + i * 0.5, 10.5, q(s));
-  const jailAt = (k, i) => rotP(JC + (i % 2 ? 1.2 : -1.2), JC + (i < 2 ? -1.2 : 1.2), k);
+  const homeV = (s, j) => rotP(...baseHome(j), q(s));
+  const cieloV = (s, i) => rotP(C - 1.25 + i * 0.83, C + 1.75, q(s));
+  const jailAt = (k, i) => rotP(JC + (i % 2 ? 0.95 : -0.95), JC + (i < 2 ? -0.95 : 0.95), k);
   function pieceV(s, p, i) {
     if (p < 0) return jailAt(q(s), i);
     if (p <= LAST_TRACK) return trackV(absOf(s, p));
@@ -195,27 +218,28 @@ export function mountParques(el, ctx) {
         + `<linearGradient id="pqS${s}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${tint(c, 0.28)}"/><stop offset="1" stop-color="${shade(c, 0.1)}"/></linearGradient>`;
     }
     let h = `<defs>${defs}</defs>`
-      + '<rect x="-.5" y="-.5" width="20" height="20" rx="1" fill="url(#pqFrame)"/><rect x="-.5" y="-.5" width="20" height="20" rx="1" fill="url(#pqFelt)"/>'
-      + '<rect x="-.27" y="-.27" width="19.54" height="19.54" rx=".8" fill="none" stroke="rgba(255,255,255,.16)" stroke-width=".06"/>'
+      + '<rect width="20" height="20" rx="1" fill="url(#pqFrame)"/><rect width="20" height="20" rx="1" fill="url(#pqFelt)"/>'
+      + '<rect x=".2" y=".2" width="19.6" height="19.6" rx=".82" fill="none" stroke="rgba(255,255,255,.16)" stroke-width=".06"/>'
       // la cruz: base oscura que se ve como ranuras entre las casillas
-      + '<rect x="7.88" y="-.12" width="3.24" height="19.24" rx=".35" fill="#170c33"/><rect x="-.12" y="7.88" width="19.24" height="3.24" rx=".35" fill="#170c33"/>';
+      + `<rect x="${f(C - HALF - 0.12)}" y=".18" width="${f(2 * HALF + 0.24)}" height="19.64" rx=".35" fill="#170c33"/><rect x=".18" y="${f(C - HALF - 0.12)}" width="19.64" height="${f(2 * HALF + 0.24)}" rx=".35" fill="#170c33"/>`;
     // cárceles: patio con rejas y el personaje del dueño en la esquina
     for (let s = 0; s < 4; s++) {
       const k = q(s), id = seatPlayer(s);
       const [cx, cy] = rotP(JC, JC, k);
+      const hj = JS / 2, yr = 2.05;   // media cárcel y radio del patio
       h += `<g opacity="${id ? 1 : 0.5}">`
-        + `<rect x="${cx - 3.7}" y="${cy - 3.7}" width="7.4" height="7.4" rx="1" fill="url(#pqJ${s})" stroke="#170c33" stroke-width=".1"/>`
-        + `<rect x="${cx - 3.42}" y="${cy - 3.42}" width="6.84" height="6.84" rx=".78" fill="none" stroke="rgba(255,255,255,.38)" stroke-width=".06"/>`
-        + `<clipPath id="pqClip${s}"><circle cx="${cx}" cy="${cy}" r="2.55"/></clipPath>`
-        + `<circle cx="${cx}" cy="${cy}" r="2.55" fill="url(#pqYard)"/>`
-        + `<g clip-path="url(#pqClip${s})" stroke="rgba(255,255,255,.17)" stroke-width=".11">${[-3, -2, -1, 0, 1, 2, 3].map((b) => `<line x1="${f(cx + b * 0.72)}" y1="${cy - 2.6}" x2="${f(cx + b * 0.72)}" y2="${cy + 2.6}"/>`).join('')}</g>`
-        + `<circle cx="${cx}" cy="${cy}" r="2.55" fill="none" stroke="rgba(255,255,255,.65)" stroke-width=".09"/>`;
-      for (let i = 0; i < 4; i++) { const [jx, jy] = jailAt(k, i); h += `<ellipse cx="${f(jx)}" cy="${f(jy + 0.42)}" rx=".5" ry=".17" fill="rgba(0,0,0,.28)"/>`; }
+        + `<rect x="${f(cx - hj)}" y="${f(cy - hj)}" width="${JS}" height="${JS}" rx=".9" fill="url(#pqJ${s})" stroke="#170c33" stroke-width=".1"/>`
+        + `<rect x="${f(cx - hj + 0.24)}" y="${f(cy - hj + 0.24)}" width="${f(JS - 0.48)}" height="${f(JS - 0.48)}" rx=".7" fill="none" stroke="rgba(255,255,255,.38)" stroke-width=".06"/>`
+        + `<clipPath id="pqClip${s}"><circle cx="${f(cx)}" cy="${f(cy)}" r="${yr}"/></clipPath>`
+        + `<circle cx="${f(cx)}" cy="${f(cy)}" r="${yr}" fill="url(#pqYard)"/>`
+        + `<g clip-path="url(#pqClip${s})" stroke="rgba(255,255,255,.17)" stroke-width=".1">${[-3, -2, -1, 0, 1, 2, 3].map((b) => `<line x1="${f(cx + b * 0.58)}" y1="${f(cy - yr - 0.05)}" x2="${f(cx + b * 0.58)}" y2="${f(cy + yr + 0.05)}"/>`).join('')}</g>`
+        + `<circle cx="${f(cx)}" cy="${f(cy)}" r="${yr}" fill="none" stroke="rgba(255,255,255,.65)" stroke-width=".09"/>`;
+      for (let i = 0; i < 4; i++) { const [jx, jy] = jailAt(k, i); h += `<ellipse cx="${f(jx)}" cy="${f(jy + 0.4)}" rx=".48" ry=".16" fill="rgba(0,0,0,.28)"/>`; }
       if (id) {
-        const ax = cx + Math.sign(cx - 9.5) * 2.78, ay = cy + Math.sign(cy - 9.5) * 2.78;
-        h += `<circle cx="${ax}" cy="${ay}" r=".78" fill="rgba(255,255,255,.94)" stroke="#170c33" stroke-width=".07"/>`
+        const ax = cx + Math.sign(cx - C) * 2.15, ay = cy + Math.sign(cy - C) * 2.15;
+        h += `<circle cx="${f(ax)}" cy="${f(ay)}" r=".62" fill="rgba(255,255,255,.94)" stroke="#170c33" stroke-width=".07"/>`
           // sin la clase .avatar: su CSS (width: 100%) lo haría gigante dentro del tablero
-          + avatarSVG(validAvatar(player(id).a)).replace('width="100" height="100" class="avatar"', `x="${f(ax - 0.62)}" y="${f(ay - 0.62)}" width="1.24" height="1.24"`);
+          + avatarSVG(validAvatar(player(id).a)).replace('width="100" height="100" class="avatar"', `x="${f(ax - 0.5)}" y="${f(ay - 0.5)}" width="1" height="1"`);
       }
       h += '</g>';
     }
@@ -223,22 +247,23 @@ export function mountParques(el, ctx) {
     for (let a = 0; a < 68; a++) {
       const side = Math.floor(a / 17), i = a % 17, k = side - mySeat;
       const [x, y] = rotP(...baseTrack(i), k);
-      if (i === 12) h += cell(x, y, `url(#pqS${side})`) + star(x, y, 0.3, '#fff', 'rgba(0,0,0,.3)');
-      else if (i === 4) h += cell(x, y, 'url(#pqSafe)') + star(x, y, 0.3, '#f5a300', '#a35f00');
-      else if (i === 8) h += cell(x, y, `url(#pqH${side})`) + chevron(x, y, k, '#fff');
-      else h += cell(x, y, 'url(#pqCell)');
+      if (i === 12) h += cell(x, y, `url(#pqS${side})`, k) + star(x, y, 0.32, '#fff', 'rgba(0,0,0,.3)');
+      else if (i === 4) h += cell(x, y, 'url(#pqSafe)', k) + star(x, y, 0.32, '#f5a300', '#a35f00');
+      else if (i === 8) h += cell(x, y, `url(#pqH${side})`, k) + chevron(x, y, k, '#fff');
+      else h += cell(x, y, 'url(#pqCell)', k);
     }
     // llegadas
     for (let s = 0; s < 4; s++) {
-      for (let j = 0; j < 7; j++) { const [x, y] = homeV(s, j); h += cell(x, y, `url(#pqH${s})`) + chevron(x, y, q(s), 'rgba(255,255,255,.65)'); }
+      for (let j = 0; j < 7; j++) { const [x, y] = homeV(s, j); h += cell(x, y, `url(#pqH${s})`, q(s)) + chevron(x, y, q(s), 'rgba(255,255,255,.65)'); }
     }
     // cielo
     for (let s = 0; s < 4; s++) {
-      const pts = [[8, 11], [11, 11], [9.5, 9.5]].map(([x, y]) => rotP(x, y, q(s)).join(',')).join(' ');
+      const pts = [[C - HALF, C + HALF], [C + HALF, C + HALF], [C, C]].map(([x, y]) => rotP(x, y, q(s)).map(f).join(',')).join(' ');
       h += `<polygon points="${pts}" fill="${seatColor(s)}" stroke="#170c33" stroke-width=".07" stroke-linejoin="round"/>`;
     }
-    h += '<rect x="8" y="8" width="3" height="3" fill="url(#pqSky)"/><rect x="8" y="8" width="3" height="3" rx=".1" fill="none" stroke="#170c33" stroke-width=".1"/>'
-      + '<circle cx="9.5" cy="9.5" r=".6" fill="url(#pqGold)" stroke="#170c33" stroke-width=".07"/>' + star(9.5, 9.5, 0.36, '#fff', 'rgba(150,90,0,.7)');
+    const c0 = f(C - HALF), cs = f(2 * HALF);
+    h += `<rect x="${c0}" y="${c0}" width="${cs}" height="${cs}" fill="url(#pqSky)"/><rect x="${c0}" y="${c0}" width="${cs}" height="${cs}" rx=".12" fill="none" stroke="#170c33" stroke-width=".1"/>`
+      + `<circle cx="${C}" cy="${C}" r=".8" fill="url(#pqGold)" stroke="#170c33" stroke-width=".08"/>` + star(C, C, 0.48, '#fff', 'rgba(150,90,0,.7)');
     bgSvg.innerHTML = h;
     // degradados de los peones (uno por color) y la sombra
     let pd = '<radialGradient id="pqShadow"><stop offset="0" stop-color="#000" stop-opacity=".55"/><stop offset=".6" stop-color="#000" stop-opacity=".25"/><stop offset="1" stop-color="#000" stop-opacity="0"/></radialGradient>';
@@ -302,11 +327,13 @@ export function mountParques(el, ctx) {
     const out = new Map();
     for (const [gk, list] of groups) {
       list.sort((a, b) => a.s - b.s || a.i - b.i);
-      const [bx, by] = pieceV(list[0].s, list[0].show, list[0].i);
-      const solo = gk[0] === 'j' || gk[0] === 'c' || gk[0] === 'w';
-      const offs = solo ? OFFS[1] : offsOf(list.length);
-      const sc = gk[0] === 'j' ? 1.45 : gk[0] === 'c' ? 0.62 : scaleOf(list.length);
-      list.forEach((r, k) => out.set(r.key, { x: bx + offs[k][0], y: by + offs[k][1], sc }));
+      const r0 = list[0];
+      const [bx, by] = pieceV(r0.s, r0.show, r0.i);
+      if (gk[0] === 'j' || gk[0] === 'c') { out.set(r0.key, { x: bx, y: by, sc: gk[0] === 'j' ? 1.35 : 0.85 }); continue; }
+      // la casilla es ancha o alta según su brazo
+      const k = r0.show <= LAST_TRACK ? Math.floor(absOf(r0.s, r0.show) / 17) - mySeat : q(r0.s);
+      const { sc, offs } = layoutOf(gk[0] === 'w' ? 1 : list.length, wideK(k));
+      list.forEach((r, n) => out.set(r.key, { x: bx + offs[n][0], y: by + offs[n][1], sc }));
     }
     return out;
   }
@@ -411,7 +438,7 @@ export function mountParques(el, ctx) {
   }
   function land(r, p, c) {
     if (c !== r.chain) return;
-    sfx.tick(0.45);
+    sfx.step(0.7);
     const fns = r.onStep.get(p);
     if (fns) { r.onStep.delete(p); fns.forEach((fn) => fn()); }
     stepWalk(r, c);
@@ -461,7 +488,7 @@ export function mountParques(el, ctx) {
         if (ev && ev.t === 'move' && ev.p === r.id && ev.i === r.i) {
           onLand(r, to, () => {
             if (snapping) return;
-            if (ev.home) { fxBurst(...cieloV(r.s, r.i), '#ffd23f', 12); sfx.big(); if (ev.p === me()) banner('¡Al cielo!', '#ffd23f'); }
+            if (ev.home) { fxBurst(...cieloV(r.s, r.i), '#ffd23f', 12); sfx.big(); }
             if (ev.wall) sfx.thunk(0.6);
           });
         }
@@ -556,12 +583,15 @@ export function mountParques(el, ctx) {
     for (const k of want) {
       if (wallEls.has(k)) continue;
       const cut = k.indexOf(':');
-      const [x, y] = trackV(Number(k.slice(0, cut)));
+      const abs = Number(k.slice(0, cut));
+      const [x, y] = trackV(abs);
+      const [cw, ch] = cellWH(Math.floor(abs / 17) - mySeat).map((v) => v + 0.16);
       const c = hex(ctx.colorOf(k.slice(cut + 1)));
       const g = document.createElementNS(NS, 'g');
       g.setAttribute('transform', `translate(${f(x)} ${f(y)})`);
-      g.innerHTML = `<g class="pq-wall-in"><rect class="pq-wall-glow" x="-.52" y="-.52" width="1.04" height="1.04" rx=".22" stroke="${c}"/><rect class="pq-wall-line" x="-.52" y="-.52" width="1.04" height="1.04" rx=".22" stroke="${c}"/>`
-        + `<g transform="translate(.46 -.46)"><circle r=".19" fill="${c}" stroke="#fff" stroke-width=".05"/>${LOCK}</g></g>`;
+      const box = `x="${f(-cw / 2)}" y="${f(-ch / 2)}" width="${f(cw)}" height="${f(ch)}" rx=".24"`;
+      g.innerHTML = `<g class="pq-wall-in"><rect class="pq-wall-glow" ${box} stroke="${c}"/><rect class="pq-wall-line" ${box} stroke="${c}"/>`
+        + `<g transform="translate(${f(cw / 2 - 0.06)} ${f(-ch / 2 + 0.06)})"><circle r=".22" fill="${c}" stroke="#fff" stroke-width=".05"/><g transform="scale(1.15)">${LOCK}</g></g></g>`;
       wallsG.appendChild(g);
       wallEls.set(k, g);
     }
@@ -576,14 +606,15 @@ export function mountParques(el, ctx) {
       for (let i = 0; i < 4; i++) {
         if (!canMove(lg, me(), i, lg.dice[d])) continue;
         const [x, y] = pieceV(lg.seat[me()], lg.pcs[me()][i] + lg.dice[d], i);
-        want.set(`d${f(x)},${f(y)}`, `<g transform="translate(${f(x)} ${f(y)})"><circle class="pq-dest" r=".36" stroke="${ctx.colorOf(me())}"/></g>`);
+        want.set(`d${f(x)},${f(y)}`, `<g transform="translate(${f(x)} ${f(y)})"><circle class="pq-dest" r=".4" stroke="${ctx.colorOf(me())}"/></g>`);
       }
     }
     if (!lg.win) {
       const cur = current(lg);
       const [cx, cy] = rotP(JC, JC, q(lg.seat[cur]));
       // marco quieto (una animación aquí repintaría el tablero todo el tiempo)
-      want.set(`t${cur}`, `<rect class="pq-turn-glow" x="${cx - 3.84}" y="${cy - 3.84}" width="7.68" height="7.68" rx="1.12" stroke="${ctx.colorOf(cur)}"/><rect class="pq-turn" x="${cx - 3.84}" y="${cy - 3.84}" width="7.68" height="7.68" rx="1.12" stroke="${ctx.colorOf(cur)}"/>`);
+      const tb = `x="${f(cx - JS / 2 - 0.13)}" y="${f(cy - JS / 2 - 0.13)}" width="${f(JS + 0.26)}" height="${f(JS + 0.26)}" rx="1"`;
+      want.set(`t${cur}`, `<rect class="pq-turn-glow" ${tb} stroke="${ctx.colorOf(cur)}"/><rect class="pq-turn" ${tb} stroke="${ctx.colorOf(cur)}"/>`);
     }
     for (const [k, e] of markEls) if (!want.has(k)) { e.remove(); markEls.delete(k); }
     for (const [k, h] of want) {
@@ -656,9 +687,9 @@ export function mountParques(el, ctx) {
     rolling = true;
     setDie(dice[0], d[0], true, 0);
     setDie(dice[1], d[1], true, 70);
-    sfx.crack(1.1);
-    later(() => sfx.thud(0.45), 470);
-    later(() => sfx.click(0.35), 680);
+    sfx.dice(1);
+    later(() => sfx.diceLand(0.9), 470);
+    later(() => sfx.diceLand(0.35), 680);
     later(() => { if (tok === rollTok) { rolling = false; paintTurn(); } }, TOSS_MS + 70);
   }
   const unshake = () => dice.forEach((D) => D.el.classList.remove('shake'));
@@ -685,11 +716,13 @@ export function mountParques(el, ctx) {
       sfx.tick(0.3);
       return;
     }
+    sfx.step(0.5);
     send({ t: 'move', d, i });
   });
   function roll() {
     if (!myTurn() || lg.phase !== 'roll' || busy() || rolling) return;
     dice.forEach((D) => { D.el.classList.remove('toss'); D.el.classList.add('shake'); });
+    sfx.dice(0.45);   // suena dentro del toque (así el iPhone deja sonar el resto)
     send({ t: 'roll' });
   }
   trayEl.addEventListener('click', (e) => {
@@ -706,6 +739,8 @@ export function mountParques(el, ctx) {
   });
   rollBtn.onclick = roll;
   exitBtn.onclick = () => { if (myTurn() && lg.canExit && !rolling) send({ t: 'exit' }); };
+  // premio: volver a lanzar ya (los dados que quedan se pierden)
+  rerollBtn.onclick = () => { if (myTurn() && lg.phase === 'move' && lg.extra > 0 && !rolling) { sfx.dice(0.6); send({ t: 'reroll' }); } };
 
   // ---------------------------------------------------------------- panel
   function paintPlayers() {
@@ -768,9 +803,11 @@ export function mountParques(el, ctx) {
       return `¡Pares ${dice2}! ${mine ? 'Sacaste' : `${who} sacó`} una ficha de la cárcel${hit}`;
     }
     if (ev.t === 'move') {
-      if (ev.home) return `¡${who} ${mine ? 'coronaste' : 'coronó'} una ficha en el cielo!`;
-      return `${who} ${mine ? 'moviste' : 'movió'} ${ev.to - ev.from}${hit}${ev.wall ? (mine ? ' y armaste un bloqueo' : ' y armó un bloqueo') : ''}`;
+      const prize = ev.bonus ? ` · <b>premio</b>: ${mine ? 'vuelves' : 'vuelve'} a lanzar` : '';
+      if (ev.home) return `¡${who} ${mine ? 'coronaste' : 'coronó'} una ficha en el cielo!${prize}`;
+      return `${who} ${mine ? 'moviste' : 'movió'} ${ev.to - ev.from}${hit}${ev.wall ? (mine ? ' y armaste un bloqueo' : ' y armó un bloqueo') : ''}${prize}`;
     }
+    if (ev.t === 'reroll') return `${who} ${mine ? 'volviste' : 'volvió'} a lanzar ya${ev.lost && ev.lost.length ? ` (${mine ? 'perdiste' : 'perdió'} el ${ev.lost.join(' y el ')})` : ''}`;
     if (ev.t === 'three') return `¡Tres pares seguidos! ${mine ? 'Elige' : `${who} elige`} una ficha para coronar`;
     if (ev.t === 'crown') return `¡${who} ${mine ? 'coronaste' : 'coronó'} una ficha por los tres pares!`;
     return '';
@@ -800,7 +837,9 @@ export function mountParques(el, ctx) {
     if (rolling) { setMsg('Lanzando los dados…', true); return; }
     const allJail = lg.pcs[me()].every((p) => p === -1 || p === HOME);
     let h;
-    if (lg.phase === 'roll') h = allJail ? (lg.tries ? `Necesitas <b>pares</b> · intento ${lg.tries + 1} de 3` : 'Necesitas <b>pares</b> para salir de la cárcel') : lg.dice && lg.dice[0] === lg.dice[1] ? '¡Pares! Vuelve a lanzar' : 'Tu turno: lanza los dados';
+    const again = lg.again === 'bonus' ? '¡Premio! Vuelve a lanzar' : lg.again === 'pair' ? '¡Pares! Vuelve a lanzar' : '';
+    if (lg.phase === 'roll') h = allJail ? (lg.tries ? `Necesitas <b>pares</b> · intento ${lg.tries + 1} de 3` : again || 'Necesitas <b>pares</b> para salir de la cárcel') : again || 'Tu turno: lanza los dados';
+    else if (lg.phase === 'move' && lg.extra > 0 && !lg.canExit) h = `¡Premio! Mueve <b>${lg.dice[activeDie()]}</b> y luego lanzas, o <b>lanza ya</b>`;
     else if (lg.phase === 'crown') h = '¡Tres pares! Toca la ficha que quieres <b>coronar</b>';
     else if (lg.canExit && !lg.used[0] && !lg.used[1]) h = allOut(lg.dice) ? `¡Doble ${lg.dice[0]}! Saca <b>todas</b> tus fichas o mueve` : '¡Pares! Saca <b>una ficha</b> de la cárcel o mueve';
     else h = lg.dice[0] !== lg.dice[1] && dieOk(0) && dieOk(1) ? `Elige dado y ficha: mueve <b>${lg.dice[activeDie()]}</b>` : `Toca una ficha que brilla: mueve <b>${lg.dice[activeDie()]}</b>`;
@@ -834,6 +873,14 @@ export function mountParques(el, ctx) {
       if (exitBtn.textContent !== t) exitBtn.textContent = t;
     }
     exitBtn.disabled = !!busy();
+    const rr = mt && !rolling && lg.phase === 'move' && lg.extra > 0;
+    rerollBtn.hidden = !rr;
+    if (rr) {
+      const left = [0, 1].filter((d) => !lg.used[d]).map((d) => lg.dice[d]);
+      const t = left.length ? `Lanzar ya (pierdes ${left.join(' y ')})` : 'Lanzar ya';
+      if (rerollBtn.textContent !== t) rerollBtn.textContent = t;
+    }
+    rerollBtn.disabled = !!busy();
     stopBtn.hidden = !ctx.isHost() || !!lg.win;
   }
 
@@ -904,10 +951,13 @@ export function mountParques(el, ctx) {
       }
       if (ev.t === 'fail' && mine) sfx.out(0.4);
     }, T);
+    const arrive = ev.t === 'move' ? Math.min(14, ev.to - ev.from) * 150 + 60 : T + 600;
     if (ev.hit && ev.hit.length && (mine || ev.hit.includes(me()))) {
-      const wait = ev.t === 'move' ? Math.min(14, ev.to - ev.from) * 150 + 60 : T + 600;
-      later(() => banner(mine ? '¡Comiste!' : '¡Te comieron!', ctx.colorOf(ev.p)), wait);
+      later(() => banner(mine ? '¡Comiste! Vuelves a lanzar' : '¡Te comieron!', ctx.colorOf(ev.p)), arrive);
+    } else if (ev.bonus && ev.t === 'move' && ev.home && mine) {
+      later(() => banner('¡Al cielo! Vuelves a lanzar', '#ffd23f'), arrive + 300);
     }
+    if (ev.bonus) later(() => sfx.coin(0.8), arrive + 150);
     if (lg.win) later(() => { if (lg.win === me()) sfx.win(); else sfx.out(0.6); }, 900);
     return { ev, delay: T };
   }
@@ -948,6 +998,7 @@ export function mountParques(el, ctx) {
     },
     destroy() {
       dead = true;
+      stopMusic();
       document.removeEventListener('visibilitychange', onVis);
       clearInterval(iv);
       timers.forEach((t) => clearTimeout(t));

@@ -3,7 +3,7 @@ import { Host, findHost, MAX_PLAYERS } from './engine.js';
 import { GAMES, GAME_BY_ID } from './games/index.js';
 import { LONG_GAMES, LONG_BY_ID } from './long/index.js';
 import { preload3D } from './rt.js';
-import { isMuted, setMuted, sfx } from './audio.js';
+import { isMuted, setMuted, sfx, unlockAudio } from './audio.js';
 import { esc, $, $$, beep, buzz, fanfare, store, toast, COLORS, AVATARS } from './util.js';
 import { avatarSVG, validAvatar, icon, gameIcon, rich } from './icons.js';
 
@@ -633,5 +633,5 @@ function clearScreen() {
   stopGame();
 }
 
-// Sonido en iOS: hay que "despertar" el audio con el primer toque.
-document.addEventListener('pointerdown', () => beep(1, 0.001, 'sine', 0.0001), { once: true });
+// Sonido en iOS: hay que "despertar" el audio con un toque (se reintenta hasta que suene).
+unlockAudio();

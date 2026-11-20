@@ -40,6 +40,8 @@ function buildCourse(seed) {
   const r = mulberry32(seed ^ 0x5a0b);
   const obs = [];
   let y = -2.6;
+  let safeX = 0, prevY = 0.2;
+  const path = []; // el camino libre garantizado (y, x) — también lo usan los bots
   while (y > -LEN + 1.2) {
     const k = -y / LEN; // 0 arriba → 1 abajo
     const n = 1 + Math.floor(r() * (1.6 + k * 2.2));
@@ -59,12 +61,20 @@ function buildCourse(seed) {
       if (row.some((q) => Math.abs(q.x - o.x) < (q.hw || q.r) + w + 0.12)) continue;
       row.push(o);
     }
-    // siempre debe quedar un hueco por donde pasar sin saltar (árboles y rocas tapan)
-    const blocks = row.filter((q) => q.t !== 'ramp').map((q) => [q.x - (q.hw || q.r) - 0.06, q.x + (q.hw || q.r) + 0.06]).sort((a, b) => a[0] - b[0]);
-    let gap = 0, last = -HW;
-    for (const [a, b] of blocks) { gap = Math.max(gap, a - last); last = Math.max(last, b); }
-    gap = Math.max(gap, HW - last);
-    if (gap < 0.3) row.pop();
+    // Siempre debe haber un camino libre (sin saltar) que se alcance desde el hueco
+    // de la fila anterior: si no lo hay, se quitan los obstáculos más cercanos a ese
+    // camino hasta que aparezca. Así ninguna bajada es imposible.
+    const reach = (LAT * 0.75 * (prevY - y)) / VMAX;
+    let lane = null;
+    while (true) {
+      lane = freeLane(row, safeX, reach);
+      if (lane !== null || !row.length) break;
+      row.sort((a, b) => Math.abs(b.x - safeX) - Math.abs(a.x - safeX));
+      row.pop();
+    }
+    safeX = lane ?? safeX;
+    prevY = y;
+    path.push([y, safeX]);
     obs.push(...row);
     y -= 0.62 - k * 0.12 + r() * 0.2;
   }
@@ -76,7 +86,25 @@ function buildCourse(seed) {
       if (r() < 0.75) deco.push({ x: s * (HW + 0.25 + r() * 1.8), y: yy + r() * 0.2, s: 0.8 + r() * 0.9 });
     }
   }
-  return { obs, deco };
+  return { obs, deco, path };
+}
+
+// Centro de un hueco de al menos 0.3 entre los obstáculos de una fila que quede a
+// menos de `reach` de x0 (o null). Las rampas no tapan.
+function freeLane(row, x0, reach) {
+  const blocks = row.filter((q) => q.t !== 'ramp').map((q) => [q.x - (q.hw || q.r) - 0.05, q.x + (q.hw || q.r) + 0.05]).sort((a, b) => a[0] - b[0]);
+  const gaps = [];
+  let last = -HW + PR;
+  for (const [a, b] of blocks) { if (a > last) gaps.push([last, a]); last = Math.max(last, b); }
+  if (HW - PR > last) gaps.push([last, HW - PR]);
+  let best = null, bd = Infinity;
+  for (const [a, b] of gaps) {
+    if (b - a < 0.3) continue;
+    const c = Math.max(a + 0.15, Math.min(b - 0.15, x0));
+    const d = Math.abs(c - x0);
+    if (d <= reach && d < bd) { bd = d; best = c; }
+  }
+  return best;
 }
 
 // primer obstáculo con y <= y0 (están ordenados de arriba hacia abajo)
@@ -92,6 +120,7 @@ const G = {
   actionIcon: 'jump',
   fallText: '{splash} ¡Al suelo!',
   snapDist: 0.8,
+  cd1: (p) => (p.dcd > 0 ? p.dcd / JUMP_CD : 0),
 
   world(seed) { return buildCourse(seed); },
 

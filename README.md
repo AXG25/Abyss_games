@@ -29,6 +29,13 @@ compiten ronda tras ronda por estrellas ⭐.
 
 Puntos por ronda: 1.º 3⭐ · 2.º 2⭐ · 3.º 1⭐ · 4.º 0⭐.
 
+Al terminar la partida, en el podio todos votan qué sigue: **Volver a jugar**
+(el mismo juego, u otra fiesta con la misma cantidad de rondas), **Siguiente**
+(otro mini juego al azar que no se haya jugado) o **Volver a la sala**. Se
+decide cuando votan todos, o a los 20 s si ya votó alguien; gana la mayoría y
+en un empate decide el anfitrión (`Host.voteTick` en `js/engine.js`; cada
+jugador vota en `presence.vt`).
+
 ## Juegos largos
 
 Aparte de la fiesta de mini juegos, en la sala hay una sección **Juegos largos**:

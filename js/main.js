@@ -1,5 +1,5 @@
 import { connectLobby, LocalRoom } from './net.js';
-import { Host, findHost, MAX_PLAYERS } from './engine.js';
+import { Host, findHost, MAX_PLAYERS, VOTES, VOTE_MS } from './engine.js';
 import { GAMES, GAME_BY_ID } from './games/index.js';
 import { LONG_GAMES, LONG_BY_ID } from './long/index.js';
 import { preload3D } from './rt.js';
@@ -601,16 +601,72 @@ function instaLink(text = '') {
   return `<a class="insta" href="https://www.instagram.com/${INSTA_USER}/" target="_blank" rel="noopener">${icon('insta')}<span>${text ? `${esc(text)}<small>@${INSTA_USER}</small>` : `@${INSTA_USER}`}</span></a>`;
 }
 
-function renderFinalControls() {
+// Votación: volver a jugar, siguiente mini juego o volver a la sala.
+const VOTE_INFO = {
+  again: { ic: 'repeat', t: 'Volver a jugar', sub: (st) => (st.solo && GAME_BY_ID[st.seq[0]] ? GAME_BY_ID[st.seq[0]].name : `Otra fiesta de ${st.seq.length} rondas`) },
+  next: { ic: 'rocket', t: 'Siguiente', sub: () => 'Otro mini juego al azar' },
+  lobby: { ic: 'people', t: 'Volver a la sala', sub: () => 'Elegir con calma' },
+};
+const peerId = (p) => (typeof p.presence?.uid === 'string' ? p.presence.uid : p.peer);
+
+function renderFinalControls(st) {
   const box = $('#final-ctl');
-  if (!box) return;
-  const want = S.host ? 'host' : 'guest';
-  if (box.dataset.m === want) return;
-  box.dataset.m = want;
-  box.innerHTML = S.host
-    ? `<button class="btn big primary" id="again">${icon('repeat')} Volver a la sala</button>`
-    : `<p class="hint">El anfitrión ${icon('crown')} puede volver a la sala para otra partida.</p>`;
-  if (S.host) $('#again').onclick = () => S.host.toLobby();
+  if (!box || !st) return;
+  const meIn = st.pl.some((p) => p.id === S.me && !p.b);
+  // armar los botones una sola vez por pantalla final
+  if (box.dataset.k !== String(st.k)) {
+    box.dataset.k = String(st.k);
+    S.voteAt = Date.now();
+    box.innerHTML = `
+      <div class="vote">
+        <p class="vote-t">${meIn ? '¿Qué sigue? ¡Voten!' : 'Los jugadores están votando…'}</p>
+        <div class="vote-opts">${VOTES.map((v) => `
+          <button class="vote-opt" data-v="${v}" ${meIn ? '' : 'disabled'}>
+            <span class="vote-ic">${icon(VOTE_INFO[v].ic)}</span>
+            <span class="vote-txt"><b>${VOTE_INFO[v].t}</b><small>${esc(VOTE_INFO[v].sub(st))}</small></span>
+            <span class="vote-who"></span>
+          </button>`).join('')}</div>
+        <div class="vote-bar"><i style="animation-duration:${VOTE_MS}ms"></i></div>
+        <p class="vote-hint">Se decide cuando todos voten, o a los ${VOTE_MS / 1000} s. Si hay empate, decide el anfitrión ${icon('crown')}</p>
+      </div>`;
+    box.querySelector('.vote-opts').onclick = (e) => {
+      const b = e.target.closest('[data-v]');
+      const cur = S.lastSt;
+      if (!b || !cur || cur.ph !== 'final' || cur.vr || !S.nr) return;
+      S.myVote = { k: cur.k, v: b.dataset.v };
+      S.nr.presence({ vt: S.myVote }).catch(() => {});
+      beep(620, 0.05);
+      buzz(20);
+      renderFinalControls(cur);
+    };
+  }
+  // votos en vivo (con la carita de cada uno)
+  const inGame = new Map(st.pl.filter((p) => !p.b).map((p) => [p.id, p]));
+  const votes = {};
+  for (const peer of S.nr ? S.nr.peers() : []) {
+    const vt = peer.presence && peer.presence.vt;
+    const id = peerId(peer);
+    if (vt && vt.k === st.k && VOTES.includes(vt.v) && inGame.has(id)) votes[id] = vt.v;
+  }
+  if (S.myVote && S.myVote.k === st.k && inGame.has(S.me)) votes[S.me] = S.myVote.v;
+  for (const b of box.querySelectorAll('.vote-opt')) {
+    const v = b.dataset.v;
+    const who = Object.keys(votes).filter((id) => votes[id] === v);
+    const sig = who.join(',') + '|' + (st.vr || '');
+    if (b.dataset.sig === sig) continue;
+    b.dataset.sig = sig;
+    b.querySelector('.vote-who').innerHTML = who.map((id) => `<i style="--c:${colorOf(st, id)}">${avatarSVG(validAvatar(inGame.get(id).a))}</i>`).join('');
+    b.classList.toggle('mine', votes[S.me] === v);
+    b.classList.toggle('won', st.vr === v);
+    b.classList.toggle('lost', !!st.vr && st.vr !== v);
+  }
+  const t = box.querySelector('.vote-t');
+  if (st.vr && !t.dataset.won) {
+    t.dataset.won = '1';
+    t.innerHTML = `¡Ganó <b>${VOTE_INFO[st.vr].t}</b>!`;
+    box.querySelector('.vote-bar').hidden = true;
+    fanfare();
+  }
 }
 
 // ---------------------------------------------------------------- salir

@@ -16,12 +16,15 @@ compiten ronda tras ronda por estrellas ⭐.
 | 🔢 | Cuenta rápida *(3D)* | Llueven objetos 3D sobre un carrusel: cuenta los pedidos y responde rápido |
 | 🧠 | Simón dice *(3D)* | 3 rondas cada vez más difíciles (4→6 botones, 4→7 pasos, la última gira) |
 | ⏱️ | Para en… *(3D)* | 3 rondas: detén el cronómetro gigante en el segundo pedido (1–10) |
+| 🎈 | Gallina *(3D)* | 3 rondas: un globo se infla y su premio sube; plántate antes de que explote. El último en plantarse gana el doble. Si ya todos se plantaron, el globo se acelera |
+| ⚖️ | Equilibrio *(3D, física)* | Una grúa pasa con la pieza siguiente: suéltala y gírala para armar la torre más alta en 40 s. Física real: si queda descentrada, se cae. Todos reciben las mismas piezas y se ven las alturas de los demás en vivo |
 | 🐙 | Kraken en cubierta *(tiempo real)* | Saltar los tentáculos que giran en el barco; sobrevivir más |
 | 💣 | Lluvia de bombas *(tiempo real)* | Esquivar bombas, cajas que caen y barriles que ruedan (se saltan); 3 vidas |
 | 🟩 | Pisa el color *(tiempo real)* | Pararse en el color anunciado antes de que el piso se caiga |
 | 🪙 | Fiebre de monedas *(tiempo real)* | Recoger más monedas en 30 s |
 | 🌀 | Trompos de batalla *(tiempo real)* | Por rondas: embiste a los demás para sacarlos del estadio; la ronda la gana el último en pie y el primero en ganar 3 rondas gana |
 | 💥 | Bomba caliente *(tiempo real)* | Pasar la bomba antes de que explote; gana el último en pie |
+| 🎨 | Pinta el piso *(tiempo real)* | Cada casilla que pisas queda de tu color (y repintas la de los demás). Bombas de pintura que salpican alrededor y CORRE para embestir y marear. A los 45 s gana quien tenga más piso |
 | 🧊 | Hielo frágil *(tiempo real)* | El hielo que pisas se hunde; gana el último en pie |
 
 Puntos por ronda: 1.º 3⭐ · 2.º 2⭐ · 3.º 1⭐ · 4.º 0⭐.
@@ -103,6 +106,12 @@ el anfitrión crea la sala, los amigos se unen y él toca el juego para empezar.
 - **Bots** para probar solo (el anfitrión los agrega con +/−).
 - **Modo local**: fuera de Claude se usa `BroadcastChannel`, así que varias
   pestañas del mismo navegador pueden jugar entre sí.
+
+## Física
+
+`js/physics2d.js` es un motor 2D propio y pequeño (al estilo Box2D Lite) para polígonos
+convexos: choques por ejes separadores, impulsos acumulados con arranque en caliente,
+fricción y bloques que se duermen al quedar quietos. Lo usa Equilibrio.
 
 ## Sonido
 

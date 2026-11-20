@@ -279,6 +279,10 @@ input:focus { border-color: var(--yellow); }
 .k-3d { position: absolute; inset: 0; border-radius: 24px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.4); touch-action: none; }
 .k-top { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); background: rgba(0, 0, 0, 0.55); padding: 6px 16px; border-radius: 99px; font-family: var(--display); font-size: 26px; z-index: 2; pointer-events: none; white-space: nowrap; }
 .k-top[hidden] { display: none; }
+/* Pinta el piso: barra con la parte del piso de cada color y mi muestra de color */
+.pt-bar { display: flex; width: min(62vw, 260px); height: 14px; border-radius: 99px; overflow: hidden; border: 2px solid #fff; }
+.pt-bar i { display: block; height: 100%; transition: flex 0.25s; }
+.pt-me { display: inline-block; width: 22px; height: 22px; border-radius: 6px; background: var(--c); border: 2px solid #fff; vertical-align: -4px; margin-right: 6px; }
 .k-msg, .k-banner { z-index: 3; }
 .gfx { align-self: center; }
 .mute { background: rgba(255, 255, 255, 0.12); border-radius: 99px; width: 38px; height: 38px; font-size: 18px; margin-left: auto; margin-right: 8px; }
@@ -396,6 +400,46 @@ input:focus { border-color: var(--yellow); }
 .sw-stage { flex: 1; width: 100%; position: relative; min-height: 40vh; border-radius: 24px; overflow: hidden; display: grid; place-items: center; }
 .sw-res { min-height: 26px; font-size: 18px; text-align: center; }
 .sw-res b { color: var(--yellow); }
+/* Equilibrio */
+.st-hud { display: flex; justify-content: space-between; align-items: center; width: 100%; padding: 0 4px; }
+.st-h { font-family: var(--display); font-size: 26px; color: var(--yellow); min-width: 96px; }
+.st-time { font-family: var(--display); font-size: 30px; }
+.st-time.hot { color: #ff4d6d; }
+.st-next { display: flex; align-items: center; gap: 6px; font-size: 14px; min-width: 96px; justify-content: flex-end; }
+.st-next i { width: 22px; height: 22px; border-radius: 6px; border: 2px solid #fff; display: inline-block; }
+.st-stage { min-height: 52vh; touch-action: none; }
+.st-2d { position: absolute; inset: 0; }
+.st-legend { position: absolute; top: 8px; left: 8px; z-index: 2; display: flex; flex-direction: column; gap: 4px; pointer-events: none; }
+.st-legend span { display: flex; align-items: center; gap: 5px; background: rgba(0, 0, 0, 0.45); border-radius: 99px; padding: 2px 10px 2px 4px; font-size: 13px; }
+.st-legend i { width: 14px; height: 14px; border-radius: 50%; background: var(--c); border: 2px solid #fff; }
+.st-legend span.lead::after { content: '👑'; margin-left: 2px; }
+.st-legend b { font-family: var(--display); font-weight: 400; color: var(--yellow); }
+.st-ctl { display: flex; gap: 10px; width: 100%; }
+.st-ctl .btn { flex: 1; font-family: var(--display); font-size: 22px; padding: 16px 10px; }
+.st-drop { flex: 2 !important; background: var(--c) !important; color: #fff !important; box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35) !important; }
+.st-ctl .btn:disabled { opacity: 0.45; }
+/* Gallina */
+.gl-stage { min-height: 34vh; }
+.gl-val { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); z-index: 2; background: rgba(0, 0, 0, 0.45); border-radius: 18px; padding: 4px 18px 6px; text-align: center; pointer-events: none; }
+.gl-val small { display: block; font-size: 12px; text-transform: uppercase; letter-spacing: 1px; opacity: 0.8; }
+.gl-val b { font-family: var(--display); font-weight: 400; font-size: 40px; color: var(--yellow); line-height: 1; }
+.gl-val.hot b { color: #ff4d6d; animation: glShake 0.12s infinite; }
+.gl-val.dead b { color: #fff; }
+@keyframes glShake { 50% { transform: translateX(2px) rotate(-2deg); } }
+.gl-msg { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); z-index: 3; background: rgba(0, 0, 0, 0.6); border-radius: 99px; padding: 6px 16px; font-family: var(--display); font-size: 20px; white-space: nowrap; pointer-events: none; }
+.gl-msg[hidden] { display: none; }
+.gl-msg.pop { animation: slidein 0.35s cubic-bezier(.2, 1.4, .5, 1); }
+.gl-balloon2d { --s: 0.4; width: 180px; height: 210px; border-radius: 50% 50% 48% 48%; background: radial-gradient(circle at 35% 30%, rgba(255, 255, 255, 0.6), transparent 30%), #ef233c; transform: scale(var(--s)); transition: transform 0.1s; border: 3px solid #1b1035; }
+.gl-balloon2d.popped { opacity: 0; transform: scale(1.6); transition: all 0.2s; }
+.gl-row { display: flex; gap: 6px; width: 100%; justify-content: center; }
+.gl-chip { flex: 1; max-width: 92px; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 4px; border-radius: 14px; background: rgba(0, 0, 0, 0.3); border: 3px solid var(--c); transition: background 0.2s, transform 0.2s; position: relative; }
+.gl-chip .gl-av svg { width: 30px; height: 30px; display: block; }
+.gl-nm { font-size: 12px; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gl-st { font-family: var(--display); font-weight: 400; font-size: 17px; }
+.gl-chip.safe { background: var(--c); transform: translateY(-3px); }
+.gl-chip.boom { background: #2b2d42; opacity: 0.7; }
+.gl-chip.last::after { content: '👑'; position: absolute; top: -14px; font-size: 18px; }
+.gl-btn { line-height: 1; }
 .g-stop-btn.sw-btn { width: 140px; height: 140px; aspect-ratio: auto; font-size: 32px; flex: 0 0 auto; }
 
 /* --- Simón dice 3D --- */

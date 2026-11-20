@@ -184,6 +184,8 @@ function run(el, ctx, use3d) {
       showMsg(`{check} ¡Lo encontraste! ${(my[k] / 1000).toFixed(2)} s`, 1500);
       const c = chips[ctx.me];
       if (c) { c.classList.add('safe'); c.querySelector('.gl-st').textContent = `${(my[k] / 1000).toFixed(1)} s`; }
+      stage.classList.remove('fi-lock');
+      resEl.innerHTML = rich('{check} ¡Listo! Esperando a los demás…');
     } else if (hit !== null) {
       lockUntil = clock() + LOCK;
       sfx.hit(0.7);
@@ -191,7 +193,9 @@ function run(el, ctx, use3d) {
       view.wrong(hit);
       const it = R.items[hit];
       showMsg(`{cross} Ese es ${esc(nameOf(it.kind, it.col))}`, LOCK);
-      stage.classList.remove('fi-bad'); void stage.offsetWidth; stage.classList.add('fi-bad');
+      stage.classList.remove('fi-bad'); void stage.offsetWidth; stage.classList.add('fi-bad', 'fi-lock');
+      clearTimeout(tap.lt);
+      tap.lt = setTimeout(() => stage.classList.remove('fi-lock'), LOCK);
     }
   };
   stage.addEventListener('pointerdown', tap);
@@ -244,6 +248,7 @@ function run(el, ctx, use3d) {
         sfx.pass(0.5);
         if (my[k] === null) showMsg(`${esc(p.n)} ya lo encontró`, 1000);
       }
+      if (el2 >= FIND - 4000 && my[k] === null && !R._hint) { R._hint = 1; if (view) view.hint(R.target, ctx.seed + k * 977); showMsg('{sparkle} Pista: está por aquí', 1400); }
       if (FIND - el2 < 3000 && my[k] === null && Math.floor(el2 / 1000) !== R._tk) { R._tk = Math.floor(el2 / 1000); sfx.tick(1.2); }
       // ¿ya lo encontraron todos? saltar a la respuesta
       if (players.every((p) => { const ms = msOf(p, k, live); return valid(ms) && ms <= el2; })) {
@@ -283,6 +288,7 @@ function run(el, ctx, use3d) {
     dead = true;
     clearInterval(iv);
     clearTimeout(showMsg.t);
+    clearTimeout(tap.lt);
     stage.removeEventListener('pointerdown', tap);
     if (view) view.dispose();
   };
@@ -368,8 +374,28 @@ function build3D(m, stage) {
   showcase.rotation.x = 0.95;
   scene.add(showcase);
 
+  // Cada juguete (tipo + color) se arma una sola vez y luego se clona: las copias
+  // comparten geometría y materiales, así no se acumula memoria ronda tras ronda.
+  const tmpl = new Map();
+  const toyOf = (kind, col) => {
+    const key = kind + col;
+    if (!tmpl.has(key)) tmpl.set(key, makeToy(THREE, kind, COLS[col].c));
+    return tmpl.get(key).clone();
+  };
+  const dimMats = new Map();
+  const dimOf = (m) => {
+    if (!dimMats.has(m)) { const d = m.clone(); d.transparent = true; d.opacity = 0.22; d.depthWrite = false; dimMats.set(m, d); }
+    return dimMats.get(m);
+  };
+  // pista: un círculo que marca la zona (no el lugar exacto) cuando quedan 4 s
+  const hint = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 48), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+  hint.rotation.x = -Math.PI / 2;
+  hint.position.y = 0.012;
+  hint.visible = false;
+  board.add(hint);
+
   let toys = [];
-  let R = null, started = false, spin = 0, foundAt = -1, revealT = -1;
+  let R = null, started = false, spin = 0, revealT = -1, hintT = -1;
   const wrongT = new Map();
 
   const fitCam = () => {
@@ -399,6 +425,8 @@ function build3D(m, stage) {
     showcase.visible = !started;
     if (!started) { showcase.rotation.y += dt * 1.6; showcase.position.y = 0.32 + Math.sin(now / 300) * 0.03; }
     if (ring.visible) { ring.scale.setScalar(1 + Math.sin(now / 150) * 0.15); }
+    hint.visible = hintT >= 0 && revealT < 0;
+    if (hint.visible) { const a = Math.min(1, (now - hintT) / 600); hint.material.opacity = a * (0.45 + Math.sin(now / 200) * 0.25); hint.scale.setScalar(1.6 - a * 0.6); }
   });
 
   // posición en pantalla de un juguete (para perdonar toques un poco afuera)
@@ -417,10 +445,10 @@ function build3D(m, stage) {
       clear();
       R = round;
       started = !!go;
-      spin = 0; board.rotation.y = 0; ring.visible = false; revealT = -1; foundAt = -1;
+      spin = 0; board.rotation.y = 0; ring.visible = false; revealT = -1; hintT = -1;
       wrongT.clear();
       toys = R.items.map((it, i) => {
-        const t = makeToy(THREE, it.kind, COLS[it.col].c);
+        const t = toyOf(it.kind, it.col);
         t.position.set(it.x, 0, it.z);
         t.rotation.y = it.rot;
         // más grandes cuando hay pocos (rondas 1-2), más chicos cuando la mesa está llena
@@ -429,7 +457,7 @@ function build3D(m, stage) {
         return t;
       });
       const tg = R.items[R.target];
-      const big = makeToy(THREE, tg.kind, COLS[tg.col].c);
+      const big = toyOf(tg.kind, tg.col);
       big.scale.setScalar(3.2);
       showcase.add(big);
     },
@@ -447,7 +475,6 @@ function build3D(m, stage) {
       return idx;
     },
     found(i) {
-      foundAt = performance.now();
       const t = toys[i];
       t.getWorldPosition(v3);
       particles.burst(v3.x, 0.2, v3.z, { n: 40, color: ['#ffd60a', '#06d6a0', '#ffffff'], speed: 0.9, up: 1.2, size: 0.04, life: 0.8, gravity: 2 });
@@ -455,15 +482,29 @@ function build3D(m, stage) {
       ring.visible = true;
     },
     wrong(i) { wrongT.set(i, performance.now()); S.shake = 0.02; },
+    hint(i, seed) {
+      if (hintT >= 0 || !R) return;
+      hintT = performance.now();
+      // el centro de la pista se corre un poco al azar (pero el juguete siempre queda adentro)
+      const a = (seed % 628) / 100, d = 0.12 + (seed % 7) * 0.025;
+      hint.position.x = R.items[i].x + Math.cos(a) * d;
+      hint.position.z = R.items[i].z + Math.sin(a) * d;
+    },
     reveal(i) {
       revealT = performance.now();
+      // los demás juguetes se apagan para que se vea dónde estaba
+      toys.forEach((t, j) => { if (j !== i) t.traverse((o) => { if (o.isMesh) { o.material = dimOf(o.material); o.castShadow = false; } }); });
       ring.position.set(R.items[i].x, 0.01, R.items[i].z);
       ring.visible = true;
       const t = toys[i];
       t.getWorldPosition(v3);
       particles.burst(v3.x, 0.25, v3.z, { n: 24, color: ['#ffd60a', '#ffffff'], speed: 0.6, up: 1, size: 0.035, life: 0.7, gravity: 1.5 });
     },
-    dispose: () => S.dispose(),
+    dispose: () => {
+      for (const t of tmpl.values()) t.traverse((o) => { if (o.isMesh) { o.geometry.dispose(); o.material.dispose(); } });
+      for (const m of dimMats.values()) m.dispose();
+      S.dispose();
+    },
   };
 }
 
@@ -481,7 +522,7 @@ function build2D(canvas, stage) {
   fit();
   const ro = new ResizeObserver(fit);
   ro.observe(stage);
-  let R = null, started = false, el = 0, revealIdx = -1, foundIdx = -1, raf = 0;
+  let R = null, started = false, el = 0, revealIdx = -1, foundIdx = -1, hintIdx = -1, raf = 0;
   const sc = () => Math.min(W / 2.1, H / 2.6);
   const P = (x, z) => [W / 2 + x * sc(), H / 2 + z * sc()];
   const shape = (kind, color, x, y, r) => {
@@ -507,15 +548,19 @@ function build2D(canvas, stage) {
       if (!started) { const t = R.items[R.target]; shape(t.kind, COLS[t.col].c, W / 2, H / 2, r * 3.5); }
       else R.items.forEach((it, i) => {
         const [x, y] = P(it.x, it.z);
+        g.globalAlpha = revealIdx >= 0 && i !== revealIdx ? 0.25 : 1;
+        if (i === hintIdx && revealIdx < 0) { g.strokeStyle = 'rgba(255,255,255,0.6)'; g.lineWidth = 3; g.beginPath(); g.arc(x + r * 1.2, y - r, r * 5, 0, Math.PI * 2); g.stroke(); }
         if ((i === revealIdx || i === foundIdx)) { g.strokeStyle = '#ffd60a'; g.lineWidth = 4; g.beginPath(); g.arc(x, y, r * (1.8 + Math.sin(now / 150) * 0.2), 0, Math.PI * 2); g.stroke(); }
         shape(it.kind, COLS[it.col].c, x, y, r * it.s);
+        g.globalAlpha = 1;
       });
     }
     raf = requestAnimationFrame(draw);
   };
   raf = requestAnimationFrame(draw);
   return {
-    newRound(round, go) { R = round; started = !!go; revealIdx = foundIdx = -1; },
+    newRound(round, go) { R = round; started = !!go; revealIdx = foundIdx = hintIdx = -1; },
+    hint(i) { hintIdx = i; },
     go() { started = true; },
     tick(e) { el = e; void el; },
     pick(cx, cy) {

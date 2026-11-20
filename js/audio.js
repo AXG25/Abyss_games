@@ -43,6 +43,24 @@ export function ctx() {
 }
 export const bus = () => (ctx() ? sfxBus : null);
 
+// En el iPhone el audio solo arranca dentro de un toque (touchend/click; pointerdown
+// no siempre cuenta). Se intenta en cada toque mientras no esté sonando, y también
+// después de una llamada o de volver a la app (queda "interrumpido").
+export function unlockAudio() {
+  const go = () => {
+    if (ac && ac.state === 'running') return;
+    const c = ctx();
+    if (!c) return;
+    try {
+      // un sonido vacío dentro del toque termina de despertar el audio en Safari
+      const b = c.createBuffer(1, 1, 22050), src = c.createBufferSource();
+      src.buffer = b; src.connect(c.destination); src.start(0);
+    } catch { /* nada */ }
+  };
+  ['touchend', 'pointerup', 'click', 'keydown'].forEach((e) => addEventListener(e, go, true));
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && ac && ac.state !== 'running') ac.resume().catch(() => {}); });
+}
+
 // ---- piezas básicas
 function env(g, t, a, peak, dur) {
   g.gain.setValueAtTime(0.0001, t);
@@ -151,6 +169,21 @@ export const sfx = {
   spark: (v = 1) => noise({ dur: 0.05, vol: 0.06 * v, type: 'highpass', f0: 6000 }),
   win: () => [523, 659, 784, 1047, 784, 1047].forEach((f, i) => tone({ type: 'square', f0: f, dur: i === 5 ? 0.6 : 0.14, vol: 0.06, at: i * 0.13 })),
   warn: () => [0, 0.18, 0.36].forEach((a) => tone({ type: 'square', f0: 740, dur: 0.12, vol: 0.06, at: a })),
+  // dados que ruedan (cascabeleo) y que caen en la mesa
+  dice: (v = 1) => {
+    for (let i = 0; i < 7; i++) noise({ dur: 0.025, vol: 0.13 * v, type: 'bandpass', f0: 1800 + Math.random() * 2600, q: 3, at: i * 0.05 + Math.random() * 0.02 });
+    tone({ type: 'sine', f0: 190, f1: 120, dur: 0.06, vol: 0.05 * v, at: 0.05 });
+  },
+  diceLand: (v = 1) => {
+    noise({ dur: 0.05, vol: 0.2 * v, type: 'bandpass', f0: 900, q: 2 });
+    tone({ type: 'sine', f0: 150, f1: 90, dur: 0.09, vol: 0.12 * v });
+    noise({ dur: 0.03, vol: 0.1 * v, type: 'bandpass', f0: 1500, q: 2, at: 0.12 });
+  },
+  // ficha de madera que salta a la siguiente casilla
+  step: (v = 1) => {
+    noise({ dur: 0.04, vol: 0.12 * v, type: 'bandpass', f0: 1000 + Math.random() * 400, q: 4 });
+    tone({ type: 'sine', f0: 520 + Math.random() * 80, f1: 360, dur: 0.05, vol: 0.045 * v });
+  },
 };
 
 // Hablar (por ejemplo, anunciar un color). Usa la voz del celular si existe.
@@ -179,6 +212,8 @@ const STYLES = {
   tense: { root: 'C', minor: true, prog: [0, 1, 0, 6], bpm: 120, lead: 'square', pattern: [0, 3, 6, 3, 0, 3, 6, 9] },
   race: { root: 'E', minor: false, prog: [0, 4, 5, 3], bpm: 172, lead: 'sawtooth', pattern: [0, 4, 7, 4, 9, 7, 4, 7] },
   ice: { root: 'B', minor: true, prog: [0, 5, 3, 6], bpm: 128, lead: 'triangle', pattern: [0, 4, 7, 11, 7, 4, 0, 7] },
+  // suave, sin batería: para juegos de mesa largos (Parqués)
+  calm: { root: 'F', minor: false, prog: [0, 5, 3, 4], bpm: 84, lead: 'triangle', pattern: [0, 2, 4, 7, 4, 2, 4, 2], soft: true, drums: false },
 };
 const MAJ = [0, 2, 4, 5, 7, 9, 11];
 const MIN = [0, 2, 3, 5, 7, 8, 10];
@@ -201,9 +236,9 @@ export function music(style) {
     // bajo
     if (i % 2 === 0) {
       const o = c.createOscillator(), g = c.createGain();
-      o.type = 'triangle';
+      o.type = S.soft ? 'sine' : 'triangle';
       o.frequency.value = freq(deg(ch, -1) + (i === 6 ? 12 : 0));
-      g.gain.setValueAtTime(0.22, time);
+      g.gain.setValueAtTime(S.soft ? 0.14 : 0.22, time);
       g.gain.exponentialRampToValueAtTime(0.0001, time + beat * 1.8);
       o.connect(g); g.connect(musicBus); o.start(time); o.stop(time + beat * 2);
     }
@@ -213,10 +248,11 @@ export function music(style) {
     const n = deg(ch + Math.floor(S.pattern[i] * 0.6), 1);
     o.frequency.value = freq(n);
     f.type = 'lowpass';
-    f.frequency.value = 2400;
-    g.gain.setValueAtTime(0.06, time);
-    g.gain.exponentialRampToValueAtTime(0.0001, time + beat * 0.9);
-    o.connect(f); f.connect(g); g.connect(musicBus); o.start(time); o.stop(time + beat);
+    f.frequency.value = S.soft ? 1300 : 2400;
+    g.gain.setValueAtTime(S.soft ? 0.045 : 0.06, time);
+    g.gain.exponentialRampToValueAtTime(0.0001, time + beat * (S.soft ? 1.8 : 0.9));
+    o.connect(f); f.connect(g); g.connect(musicBus); o.start(time); o.stop(time + beat * (S.soft ? 2 : 1));
+    if (S.drums === false) return;
     // batería: bombo en 0 y 4, caja en 2 y 6, platillo en todos
     const drum = (type, vol, dur, fq) => {
       const s = c.createBufferSource(), fl = c.createBiquadFilter(), gg = c.createGain();

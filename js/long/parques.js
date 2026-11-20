@@ -14,6 +14,11 @@
 //  - BLOQUEOS: dos (o más) fichas del mismo color en una casilla del recorrido la
 //    cierran. Las fichas de otro color no pueden pasar por ahí ni caer ahí; las
 //    del mismo color sí pasan.
+//  - Máximo DOS fichas del mismo color por casilla, salvo en los seguros y las
+//    salidas (ahí caben todas).
+//  - PREMIO: comer una ficha o meter una en el cielo da otro lanzamiento. Puedes
+//    usar los dados que te queden y luego volver a lanzar, o volver a lanzar ya
+//    (los dados que quedaban se pierden).
 //  - Pares = vuelves a lanzar. TRES PARES seguidos (sin contar los de salir de la
 //    cárcel): eliges una ficha y se corona directo en el cielo.
 //  - Caer en una casilla con fichas rivales las manda a la cárcel, salvo en los
@@ -49,6 +54,8 @@ export function init(ids, seed, prevWins = {}) {
     dice: null, used: [false, false],
     tries: 0,          // intentos de sacar pares con todo en la cárcel
     pairs: 0,          // pares seguidos
+    extra: 0,          // lanzamientos de premio pendientes (por comer o llegar al cielo)
+    again: null,       // por qué vuelve a lanzar el mismo jugador: 'pair' · 'bonus'
     canExit: false,    // sacó pares con fichas en la cárcel: puede sacarlas
     tn: 1, ev: null, win: null, rank: null, wins,
   };
@@ -94,18 +101,26 @@ export function blockedAt(lg, pid, from, to) {
   return -1;
 }
 
+// ¿Ya hay dos fichas mías en esa casilla del recorrido? (fuera de seguros y salidas no caben más)
+const full = (lg, pid, to) => {
+  if (!onTrack(to)) return false;
+  const abs = absOf(lg.seat[pid], to);
+  return !SEGUROS.has(abs) && countAt(lg, pid, abs) >= 2;
+};
+
 // ¿Puede la ficha i moverse `d` casillas?
 export function canMove(lg, pid, i, d) {
   const p = lg.pcs[pid][i];
-  return p >= 0 && p < HOME && p + d <= HOME && blockedAt(lg, pid, p, p + d) < 0;
+  return p >= 0 && p < HOME && p + d <= HOME && blockedAt(lg, pid, p, p + d) < 0 && !full(lg, pid, p + d);
 }
-// Por qué la ficha i no se puede mover `d`: 'jail' · 'home' · 'exact' · 'block' · null (sí puede)
+// Por qué la ficha i no se puede mover `d`: 'jail' · 'home' · 'exact' · 'block' · 'full' · null (sí puede)
 export function whyNot(lg, pid, i, d) {
   const p = lg.pcs[pid][i];
   if (p === -1) return 'jail';
   if (p >= HOME) return 'home';
   if (p + d > HOME) return 'exact';
   if (blockedAt(lg, pid, p, p + d) >= 0) return 'block';
+  if (full(lg, pid, p + d)) return 'full';
   return null;
 }
 
@@ -150,7 +165,30 @@ function nextTurn(lg) {
   lg.used = [false, false];
   lg.tries = 0;
   lg.pairs = 0;
+  lg.extra = 0;
+  lg.again = null;
   lg.canExit = false;
+}
+
+// Se acabaron los dados (o se descartaron): con pares vuelve a lanzar; si no, con
+// un premio pendiente también (y se gasta); si no, pasa el turno.
+//   keep: deja los dados a la vista (p. ej. un lanzamiento sin jugada posible)
+function rollAgainOrPass(lg, keep = false) {
+  const pair = lg.dice && lg.dice[0] === lg.dice[1];
+  const again = pair ? 'pair' : lg.extra > 0 ? 'bonus' : null;
+  if (!again) {
+    const d = lg.dice;
+    nextTurn(lg);
+    if (keep) { lg.dice = d; lg.used = [true, true]; }
+    return;
+  }
+  if (again === 'bonus') lg.extra--;
+  lg.again = again;
+  lg.phase = 'roll';
+  lg.canExit = false;
+  lg.tries = 0;
+  if (keep) lg.used = [true, true];
+  else { lg.dice = null; lg.used = [false, false]; }
 }
 
 const done = (lg, pid) => lg.pcs[pid].every((p) => p === HOME);
@@ -170,12 +208,11 @@ function afterMove(lg, pid) {
   if (lg.win) return;
   const left = [0, 1].some((d) => !lg.used[d] && [0, 1, 2, 3].some((i) => canMove(lg, pid, i, lg.dice[d])));
   if (left) return;
-  const pair = lg.dice[0] === lg.dice[1];
-  if (pair) { lg.phase = 'roll'; lg.dice = null; lg.used = [false, false]; lg.canExit = false; lg.tries = 0; }
-  else nextTurn(lg);
+  rollAgainOrPass(lg);
 }
 
 // Acciones: { t: 'roll' } · { t: 'move', d, i } · { t: 'exit' } · { t: 'crown', i }
+//          · { t: 'reroll' } (con un premio: volver a lanzar ya, perdiendo los dados que quedan)
 //   `rnd` (solo el anfitrión) da los números de los dados.
 export function act(lg, pid, a, info = {}) {
   if (!a || lg.win || current(lg) !== pid) return false;
@@ -187,6 +224,7 @@ export function act(lg, pid, a, info = {}) {
     const pair = d[0] === d[1];
     lg.dice = d;
     lg.used = [false, false];
+    lg.again = null;
     lg.tn++;
     const onBoard = ps.some((p) => p >= 0 && p < HOME);
     const jailed = ps.filter((p) => p === -1).length;
@@ -196,28 +234,42 @@ export function act(lg, pid, a, info = {}) {
       if (pair) {
         const { n, hit, all } = exitJail(lg, pid);
         lg.ev = { t: 'exit', p: pid, d, k: n, all, hit, r: 1, n: lg.tn };   // r: salió con este lanzamiento
+        if (hit.length) { lg.extra++; lg.ev.bonus = 1; }                   // se comió a alguien: premio
         lg.tries = 0;
         lg.dice = d;
         lg.used = [true, true];
         lg.phase = 'roll';          // con los pares de salir no se mueve: vuelve a lanzar
+        lg.again = 'pair';
         return true;
       }
       lg.tries++;
-      if (lg.tries >= 3) { lg.ev = { t: 'fail', p: pid, d, n: lg.tn }; nextTurn(lg); lg.dice = d; lg.used = [true, true]; }
-      else { lg.ev.tries = lg.tries; lg.used = [true, true]; }
+      if (lg.tries >= 3) {
+        lg.ev = { t: 'fail', p: pid, d, n: lg.tn };
+        // sin pares en 3 intentos; si tenía un premio pendiente, lo usa
+        if (lg.extra > 0) { lg.extra--; lg.tries = 0; lg.again = 'bonus'; lg.used = [true, true]; }
+        else { nextTurn(lg); lg.dice = d; lg.used = [true, true]; }
+      } else { lg.ev.tries = lg.tries; lg.used = [true, true]; }
       return true;
     }
     if (pair) {
       lg.pairs++;
       if (lg.pairs >= 3) { lg.phase = 'crown'; lg.ev = { t: 'three', p: pid, d, n: lg.tn }; return true; }
-    }
+    } else lg.pairs = 0;   // los pares tienen que ser seguidos
     lg.phase = 'move';
     lg.canExit = pair && jailed > 0;
     if (!options(lg, pid).length && !lg.canExit) {
       lg.ev.lost = 1;              // ningún dado sirve
       if ([0, 1, 2, 3].some((i) => d.some((n) => whyNot(lg, pid, i, n) === 'block'))) lg.ev.block = 1;   // por un bloqueo
-      if (pair) { lg.phase = 'roll'; lg.used = [true, true]; } else { nextTurn(lg); lg.dice = d; lg.used = [true, true]; }
+      rollAgainOrPass(lg, true);
     }
+    return true;
+  }
+  if (a.t === 'reroll') {
+    // con un premio pendiente: volver a lanzar ya; los dados que quedaban se pierden
+    if (lg.phase !== 'move' || !(lg.extra > 0)) return false;
+    lg.ev = { t: 'reroll', p: pid, lost: [0, 1].filter((d) => !lg.used[d]).map((d) => lg.dice[d]), n: lg.tn };
+    lg.tn++;
+    rollAgainOrPass(lg);
     return true;
   }
   if (a.t === 'exit') {
@@ -226,9 +278,11 @@ export function act(lg, pid, a, info = {}) {
     const { n, hit, all } = exitJail(lg, pid);
     lg.pairs = Math.max(0, lg.pairs - 1);   // los pares de salir de la cárcel no cuentan
     lg.ev = { t: 'exit', p: pid, d, k: n, all, hit, n: lg.tn };
+    if (hit.length) { lg.extra++; lg.ev.bonus = 1; }   // se comió a alguien: premio
     lg.used = [true, true];
     lg.canExit = false;
     lg.phase = 'roll';
+    lg.again = 'pair';
     lg.tn++;
     return true;
   }
@@ -244,6 +298,7 @@ export function act(lg, pid, a, info = {}) {
     if (onTrack(to)) hit = capture(lg, pid, absOf(lg.seat[pid], to));
     lg.ev = { t: 'move', p: pid, i, from, to, hit, home: to === HOME ? 1 : 0, n: lg.tn };
     if (onTrack(to) && countAt(lg, pid, absOf(lg.seat[pid], to)) === 2) lg.ev.wall = 1;   // armó un bloqueo
+    if (hit.length || to === HOME) { lg.extra++; lg.ev.bonus = 1; }                       // premio: otro lanzamiento
     lg.tn++;
     if (!checkWin(lg, pid)) afterMove(lg, pid);
     return true;
@@ -325,5 +380,7 @@ export function autoMove(lg, pid) {
     const onBoard = lg.pcs[pid].filter((p) => p >= 0 && p < HOME).length;
     if (30 + exitCount(lg, pid) * 22 + (onBoard <= 1 ? 30 : 0) > bs) return { t: 'exit' };
   }
+  // con un premio pendiente: si lo que queda no vale la pena, vuelve a lanzar ya
+  if (lg.extra > 0 && (!best || bs < 8)) return { t: 'reroll' };
   return best ? { t: 'move', d: best.d, i: best.i } : { t: 'roll' };
 }

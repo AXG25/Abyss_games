@@ -74,6 +74,14 @@ el anfitrión crea la sala, los amigos se unen y él toca el juego para empezar.
   pausas (resultado de la mano en el dominó) que el anfitrión hace solo.
 - `START_MS` (opcional): pausa de los bots antes de la primera jugada (Ocho loco:
   mientras se ve el reparto).
+- Ocho loco y Caos comparten la pantalla `js/long/cardgame-ui.js` (cada uno solo
+  describe sus cartas y lo que hace cada poder en `ocho-ui.js` / `caos-ui.js`).
+  Los efectos comunes (piezas que vuelan, avisos, globitos, fila de rivales con
+  flechas de turno y "Sigue") están en `js/long/fx.js` y también los usa el Dominó:
+  reparto animado en cada mano, fichas que vuelan a la mesa, avisos de "pasó",
+  "robó N del pozo", "¡Dominó!" / "¡Tranque!" e historial de las últimas jugadas.
+- `pauseMs(lg)` (opcional): pausa de los bots antes de jugar (el Dominó la usa al
+  empezar cada mano, mientras se ve el reparto).
 - Para agregar otro juego largo: reglas + pantalla en `js/long/` y regístralo en
   `js/long/index.js`.
 

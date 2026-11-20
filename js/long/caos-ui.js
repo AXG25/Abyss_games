@@ -1,10 +1,9 @@
-// 🌪️ Caos — pantalla. Cartas propias de 4 elementos; dibuja el estado del
-// anfitrión y envía las jugadas. Las reglas están en caos.js.
-import { ELEMS, ELEM_NAME, TURN_MS, OFF_TURN_MS, elemOf, kindOf, canPlay, top, current, ranking } from './caos.js';
-import { avatarSVG, validAvatar, icon } from '../icons.js';
-import { endPanel, endPanelHide } from './endpanel.js';
-import { esc, buzz } from '../util.js';
-import { sfx, isMuted, setMuted } from '../audio.js';
+// 🌪️ Caos — pantalla. Cartas propias de 4 elementos. La parte común (reparto,
+// animaciones, flechas de turno, historial, avisos) está en cardgame-ui.js; aquí
+// van las cartas y lo que hace cada una. Las reglas están en caos.js.
+import * as R from './caos.js';
+import { ELEMS, ELEM_NAME, elemOf, kindOf } from './caos.js';
+import { mountCardGame, SKIP_SVG, REV_SVG, ARROW_SVG } from './cardgame-ui.js';
 
 export const ELEM_COLOR = { f: '#ff6b2c', a: '#1e9bff', p: '#3fbf4f', r: '#9b4dff' };
 const ELEM_ICON = {
@@ -53,264 +52,126 @@ const cardName = (c) => {
   if (!e) return KIND_NAME[k];
   return `${/^[0-9]$/.test(k) ? k : KIND_NAME[k]} de ${ELEM_NAME[e].toLowerCase()}`;
 };
+const mini = (c) => `<span class="oc-mini">${cardHTML(c)}</span>`;
+const elemArt = (e, cls) => `<span class="${cls}" style="color:${ELEM_COLOR[e]};--e:#1b1035">${elemIcon(e, 'sv ce-i')}</span>`;
 
 const RULES = `
   <h3>Cómo se juega</h3>
+  <p class="oc-goal">Gana quien se quede <b>sin cartas</b> primero.</p>
   <ul>
     <li>Cartas de 4 elementos: <b>fuego</b>, <b>agua</b>, <b>planta</b> y <b>rayo</b>. Cada uno recibe <b>7</b>.</li>
     <li>Juega una carta del mismo <b>elemento</b> o del mismo <b>número/acción</b> que la del centro.</li>
-    <li><b>Bloqueo</b> (⊘): el siguiente jugador pierde su turno.</li>
-    <li><b>Dirección</b> (⇄): cambia el sentido del juego (con 2 jugadores funciona como bloqueo).</li>
-    <li><b>Elemento</b> (rueda de colores) y <b>+4</b>: van sobre cualquier carta y eliges el elemento que sigue.</li>
-    <li><b>¡Los +2 y +4 se suman!</b> Si te tiran uno, responde con otro +2 o +4 (de cualquier elemento) y el castigo crece. Quien no pueda responder <b>se come todo lo acumulado</b> y pierde el turno.</li>
-    <li>Si no tienes jugada, robas 1: si sirve la puedes tirar, si no pasas.</li>
-    <li>Gana quien se quede <b>sin cartas</b>. Tienes 30 s por turno.</li>
-  </ul>`;
+    <li>Si no tienes jugada, <b>roba 1</b> tocando el mazo: si sirve la puedes tirar, si no pasas.</li>
+    <li>Las <b>flechas</b> entre los jugadores muestran hacia dónde va el turno; <b>Sigue</b> marca a quien juega después.</li>
+    <li>Tienes <b>30 s</b> por turno; si se acaban, la máquina juega por ti.</li>
+  </ul>
+  <h4>Cartas especiales</h4>
+  <div class="oc-pow">
+    <div>${mini('fS#0')}<p><b>Bloqueo</b>El siguiente jugador pierde su turno. Con 2 jugadores, vuelves a jugar.</p></div>
+    <div>${mini('aG#0')}<p><b>Dirección</b>Cambia el sentido del juego. Con 2 jugadores funciona como bloqueo.</p></div>
+    <div>${mini('pD#0')}<p><b>+2</b>El siguiente roba 2… o responde con otro +2 o +4 (de cualquier elemento).</p></div>
+    <div>${mini('X#0')}<p><b>Elemento</b>Va sobre cualquier carta y eliges el elemento que sigue.</p></div>
+    <div>${mini('Y#0')}<p><b>+4</b>Va sobre cualquier carta, eliges el elemento y el siguiente roba 4… o responde con otro +2 o +4.</p></div>
+  </div>
+  <p class="oc-why"><b>¡Los +2 y +4 se suman!</b> Quien no pueda (o no quiera) responder <b>se come todo lo acumulado</b> y pierde el turno.</p>`;
+
+const CAOS = {
+  title: 'Caos',
+  cls: 'ocho caos',
+  css: { table: 'ca-table', deck: 'ca-deck', disc: 'ca-disc', ind: 'ca-elem', stack: 'ca-stack', hand: 'ca-hand', pick: 'ca-pick', backs: 'ca-backs' },
+  R,
+  cardHTML,
+  backHTML,
+  cardName,
+  rulesHTML: RULES,
+  sortKey: (c) => { const e = elemOf(c); const k = kindOf(c); return (e ? ELEMS.indexOf(e) : 4) * 20 + (/^[0-9]$/.test(k) ? +k : 10 + 'SGDXY'.indexOf(k)); },
+  isPower: (c) => !/^[0-9]$/.test(kindOf(c)),
+  pick: {
+    needs: (c) => !elemOf(c),
+    title: 'Elige el <b>elemento</b> que sigue',
+    buttons: ELEMS.map((e) => `<button data-s="${e}" style="--e:${ELEM_COLOR[e]}">${elemIcon(e)}<small>${ELEM_NAME[e]}</small></button>`).join(''),
+  },
+  indicator: (lg) => {
+    const chosen = !elemOf(R.top(lg));
+    return {
+      key: `${lg.elem}|${chosen}`,
+      html: `<span style="background:${ELEM_COLOR[lg.elem]}">${elemIcon(lg.elem)}</span><small>${chosen ? 'Elegido' : 'Elemento'}: ${ELEM_NAME[lg.elem]}</small>`,
+      hot: chosen,
+    };
+  },
+  stackWord: 'Comer',
+  takeSub: 'Por los +2 y +4 acumulados',
+  // si todavía puede responder, preguntar antes de comerse todo
+  confirmTake: (lg, hand) => !(lg.stack && hand.some((c) => R.canPlay(lg, c))) || confirm(`¿Comerte las ${lg.stack} cartas? Todavía puedes responder con un +2 o +4.`),
+  myMsg: (lg, hand) => {
+    if (lg.stack) {
+      return hand.some((c) => R.canPlay(lg, c))
+        ? `¡Te tiran <b>+${lg.stack}</b>! Responde con un <b>+2</b> o <b>+4</b>, o cómete todo`
+        : `¡Te tiran <b>+${lg.stack}</b>! No tienes con qué responder: toca el mazo`;
+    }
+    return lg.drawn ? 'Puedes jugar la carta que robaste o pasar' : 'Tu turno: mismo <b>elemento</b> o mismo <b>número</b>';
+  },
+  waitExtra: (lg) => (lg.stack ? ` · <b class="ca-warn">van +${lg.stack}</b>` : ''),
+  playExtra: (ev, F) => {
+    const k = kindOf(ev.c);
+    const choose = !elemOf(ev.c) ? ` y ${F.mine ? 'elegiste' : 'eligió'} ${ELEM_NAME[ev.s].toLowerCase()}` : '';
+    if (k === 'D' || k === 'Y') return `${choose} · <b>van +${ev.stack}</b>${ev.to ? ` ${ev.to === F.me ? 'para ti' : `para ${F.name(ev.to)}`}` : ''}`;
+    if (ev.skip) return F.two ? `${choose} · <b>${k === 'S' ? 'bloqueo' : 'dirección'}</b>: ${F.mine ? 'vuelves' : 'vuelve'} a jugar` : `${choose} · <b>bloquea</b> a ${ev.skip === F.me ? 'ti' : F.name(ev.skip)}`;
+    if (ev.rev) return `${choose} · <b>cambia la dirección</b>`;
+    return choose;
+  },
+  onPlay: (ev, F) => {
+    const { who, mine, two, col, name, me, splash, sfx, buzz } = F;
+    const k = kindOf(ev.c);
+    const played = `${who} ${mine ? 'jugaste' : 'jugó'} ${cardName(ev.c)}`;
+    const change = () => (ev.was && ev.was !== ev.s
+      ? `${elemArt(ev.was, 'old')}<span class="arr">${ARROW_SVG}</span>${elemArt(ev.s, 'new')}`
+      : elemArt(ev.s, 'new'));
+    if (k === 'D' || k === 'Y') {
+      sfx.hit(0.6 + Math.min(1, ev.stack / 12));
+      if (ev.stack >= 6) sfx.warn();
+      splash({
+        cls: 'plus',
+        who: played,
+        art: `<span class="num">+${ev.stack}</span>${k === 'Y' ? elemArt(ev.s, 'new') : ''}`,
+        title: ev.stack > (k === 'Y' ? 4 : 2) ? '¡Se acumula!' : k === 'Y' ? '¡Roba 4!' : '¡Roba 2!',
+        sub: `${k === 'Y' ? `Ahora es <b>${ELEM_NAME[ev.s]}</b> · ` : ''}${ev.to === me ? `te comes ${ev.stack}… o responde con +2 o +4` : `${name(ev.to)} se come ${ev.stack}… o responde`}`,
+        color: col,
+      });
+      if (ev.to === me) buzz(120);
+      F.stackBump();
+      if (k === 'Y') F.suitFlash();
+    } else if (k === 'X') {
+      sfx.coin();
+      splash({
+        cls: 'suit',
+        who: played,
+        art: change(),
+        title: '¡Cambio de elemento!',
+        sub: ev.was && ev.was !== ev.s ? `Ya no es <b>${ELEM_NAME[ev.was]}</b>: ahora es <b>${ELEM_NAME[ev.s]}</b>` : `Sigue siendo <b>${ELEM_NAME[ev.s]}</b>`,
+        color: col,
+      });
+      F.suitFlash();
+    } else if (ev.skip) {
+      sfx.whoosh();
+      splash({
+        cls: 'skip',
+        who: played,
+        art: SKIP_SVG,
+        title: k === 'S' ? '¡Bloqueo!' : '¡Dirección!',
+        sub: two ? (mine ? 'Vuelves a jugar' : `${name(ev.p)} juega otra vez`) : ev.skip === me ? 'Pierdes tu turno' : `${name(ev.skip)} pierde el turno`,
+        color: col,
+      });
+      if (ev.skip === me) buzz(80); else F.skipShake(ev.skip);
+    } else if (ev.rev) {
+      sfx.whoosh();
+      splash({ cls: 'rev', who: played, art: REV_SVG, title: '¡Cambio de dirección!', sub: `Ahora sigue <b>${ev.next === me ? 'tú' : name(ev.next)}</b>`, color: col });
+      F.revSpin();
+    } else sfx.click();
+  },
+  onTake: (ev, F) => { F.sfx.boom(Math.min(1, 0.3 + ev.k / 16)); },
+};
 
 export function mountCaos(el, ctx) {
-  el.innerHTML = `
-    <section class="screen ocho caos">
-      <header class="oc-top">
-        <button class="btn ghost sm" id="ca-leave">${icon('back')} Salir</button>
-        <b class="oc-title">Caos</b>
-        <span class="oc-tools">
-          <button class="btn ghost sm oc-end-btn" id="ca-stop" hidden>Terminar</button>
-          <button class="mute" id="ca-help" aria-label="Reglas">?</button>
-          <button class="mute" id="ca-mute">${icon(isMuted() ? 'soundOff' : 'soundOn')}</button>
-        </span>
-      </header>
-      <div class="oc-opps"></div>
-      <div class="oc-table ca-table">
-        <div class="oc-dir"></div>
-        <button class="oc-deck ca-deck" aria-label="Robar carta">${backHTML()}${backHTML('b2')}${backHTML('b3')}<small class="oc-deck-n"></small><em class="oc-deck-lbl"></em></button>
-        <div class="oc-disc ca-disc"></div>
-        <div class="oc-suit ca-elem"></div>
-        <div class="oc-stack ca-stack" hidden></div>
-      </div>
-      <div class="oc-log"></div>
-      <div class="oc-msg"></div>
-      <div class="oc-mebar"></div>
-      <div class="oc-hand ca-hand"></div>
-      <div class="oc-actions"><button class="btn primary" id="ca-pass" hidden>Pasar turno</button></div>
-      <div class="oc-pick ca-pick" hidden>
-        <div class="oc-pick-box">
-          <p>Elige el <b>elemento</b> que sigue</p>
-          <div class="oc-pick-row">${ELEMS.map((e) => `<button data-s="${e}" style="--e:${ELEM_COLOR[e]}">${elemIcon(e)}<small>${ELEM_NAME[e]}</small></button>`).join('')}</div>
-          <button class="btn ghost sm" id="ca-pick-x">Cancelar</button>
-        </div>
-      </div>
-      <div class="oc-pick ca-help" hidden><div class="oc-pick-box pq-rules">${RULES}<button class="btn primary" id="ca-help-x">¡Entendido!</button></div></div>
-      <div class="oc-end" hidden></div>
-    </section>`;
-  const $ = (s) => el.querySelector(s);
-  const oppsEl = $('.oc-opps'), deckEl = $('.ca-deck'), discEl = $('.ca-disc'), elemEl = $('.ca-elem');
-  const stackEl = $('.ca-stack'), dirEl = $('.oc-dir'), logEl = $('.oc-log'), msgEl = $('.oc-msg');
-  const handEl = $('.ca-hand'), passBtn = $('#ca-pass'), pickEl = $('.ca-pick'), endEl = $('.oc-end'), meBar = $('.oc-mebar'), helpEl = $('.ca-help');
-
-  let st = null, lg = null;
-  let pending = 0, pendingAt = 0;
-  let pickCard = null;
-  let seenTn = 0, tnAt = 0;
-  let lastEvKey = '';
-  let lastTick = 0;
-  let dead = false;
-
-  $('#ca-leave').onclick = () => ctx.leave();
-  $('#ca-mute').onclick = () => { setMuted(!isMuted()); $('#ca-mute').innerHTML = icon(isMuted() ? 'soundOff' : 'soundOn'); };
-  $('#ca-stop').onclick = () => { if (confirm('¿Terminar la partida y volver a la sala?')) ctx.lobby(); };
-  $('#ca-help').onclick = () => { helpEl.hidden = false; };
-  helpEl.onclick = (e) => { if (e.target === helpEl || e.target.closest('#ca-help-x')) helpEl.hidden = true; };
-
-  const me = () => ctx.me;
-  const myHand = () => (lg && lg.hands[me()]) || null;
-  const myTurn = () => lg && !lg.win && current(lg) === me() && !!myHand();
-  const busy = () => pending && pending === lg.tn && Date.now() - pendingAt < 3000;
-  const player = (id) => (st.pl || []).find((p) => p.id === id) || { id, n: '¿?', a: 'frog' };
-  const send = (a) => {
-    if (!myTurn() || busy()) return;
-    pending = lg.tn;
-    pendingAt = Date.now();
-    ctx.act({ ...a, tn: lg.tn });
-    paint();
-  };
-
-  deckEl.onclick = () => {
-    if (!myTurn() || busy() || (lg.drawn && !lg.stack)) return;
-    if (lg.stack && myHand().some((c) => canPlay(lg, c)) && !confirm(`¿Comerte las ${lg.stack} cartas? Todavía puedes responder con un +2 o +4.`)) return;
-    sfx.click();
-    send({ t: 'draw' });
-  };
-  passBtn.onclick = () => { if (myTurn() && lg.drawn) send({ t: 'pass' }); };
-  handEl.onclick = (e) => {
-    const b = e.target.closest('.ca[data-c]');
-    if (!b || !myTurn() || busy()) return;
-    const c = b.dataset.c;
-    if (!canPlay(lg, c)) { b.classList.remove('nope'); void b.offsetWidth; b.classList.add('nope'); buzz(60); return; }
-    if (!elemOf(c)) { pickCard = c; pickEl.hidden = false; return; }
-    send({ t: 'play', c });
-  };
-  pickEl.onclick = (e) => {
-    const b = e.target.closest('[data-s]');
-    if (b && pickCard) { const c = pickCard; pickCard = null; pickEl.hidden = true; send({ t: 'play', c, s: b.dataset.s }); return; }
-    if (e.target.closest('#ca-pick-x') || e.target === pickEl) { pickCard = null; pickEl.hidden = true; }
-  };
-
-  function paintOpps() {
-    const order = lg.order;
-    const mi = order.indexOf(me());
-    const ids = mi >= 0 ? [...order.slice(mi + 1), ...order.slice(0, mi)] : order.slice();
-    const cur = current(lg);
-    oppsEl.innerHTML = ids.map((id) => {
-      const p = player(id);
-      const n = (lg.hands[id] || []).length;
-      return `<div class="oc-opp ${id === cur && !lg.win ? 'turn' : ''} ${p.off ? 'off' : ''}" style="--c:${ctx.colorOf(id)}">
-          <span class="oc-av">${avatarSVG(validAvatar(p.a))}</span>
-          <span class="oc-name">${esc(p.n)}${p.b ? ' <i>bot</i>' : ''}</span>
-          <span class="oc-backs ca-backs">${'<i></i>'.repeat(Math.min(n, 8))}</span>
-          <span class="oc-n">${n} carta${n === 1 ? '' : 's'}${n === 1 && !lg.win ? ' <em>¡Última!</em>' : ''}</span>
-          ${lg.wins[id] ? `<span class="oc-w">${icon('trophy')}${lg.wins[id]}</span>` : ''}
-          <span class="oc-timer"><i></i></span>
-        </div>`;
-    }).join('');
-  }
-
-  function paintTable() {
-    const t = top(lg);
-    const ev = lg.ev;
-    const fresh = ev && ev.t === 'play' && JSON.stringify(ev) !== lastEvKey;
-    discEl.innerHTML = (lg.disc.length > 1 ? cardHTML(lg.disc[lg.disc.length - 2], 'under') : '') + cardHTML(t, fresh ? (ev.p === me() ? 'in-up' : 'in-down') : '');
-    elemEl.innerHTML = `<span style="background:${ELEM_COLOR[lg.elem]}">${elemIcon(lg.elem)}</span><small>${!elemOf(t) ? 'Elegido' : 'Elemento'}: ${ELEM_NAME[lg.elem]}</small>`;
-    elemEl.classList.toggle('hot', !elemOf(t));
-    stackEl.hidden = !lg.stack;
-    stackEl.textContent = `+${lg.stack}`;
-    dirEl.innerHTML = lg.dir === 1 ? '↻' : '↺';
-    $('.oc-deck-n').textContent = lg.draw.length;
-    const can = myTurn() && !busy() && (!lg.drawn || lg.stack);
-    deckEl.classList.toggle('ok', can);
-    $('.oc-deck-lbl').textContent = can ? (lg.stack ? `Comer ${lg.stack}` : 'Robar') : '';
-  }
-
-  function paintHand() {
-    const hand = myHand();
-    if (!hand) { handEl.innerHTML = '<p class="hint">Estás mirando la partida</p>'; return; }
-    const mine = myTurn() && !busy();
-    const ord = (c) => { const e = elemOf(c); const k = kindOf(c); return (e ? ELEMS.indexOf(e) : 4) * 20 + (/^[0-9]$/.test(k) ? +k : 10 + 'SGDXY'.indexOf(k)); };
-    const cards = hand.slice().sort((a, b) => ord(a) - ord(b));
-    const W = Math.max(240, handEl.clientWidth || 340);
-    const n = cards.length;
-    const gap = n > 1 ? Math.max(-46, Math.min(6, (W - 8 - 64 * n) / (n - 1))) : 0;
-    handEl.style.setProperty('--gap', gap + 'px');
-    handEl.innerHTML = cards.map((c) => cardHTML(c, `${mine ? (canPlay(lg, c) ? 'ok' : 'dim') : ''} ${c === lg.drawn ? 'new' : ''}`)).join('');
-  }
-
-  function evText(ev) {
-    if (!ev) return '';
-    const mine = ev.p === me();
-    const who = mine ? 'Tú' : esc(player(ev.p).n);
-    if (ev.t === 'play') {
-      const k = kindOf(ev.c);
-      const blk = ev.skip ? ` · ¡${ev.skip === me() ? 'te bloqueó el turno' : `bloqueó a ${esc(player(ev.skip).n)}`}!` : '';
-      const extra = k === 'D' || k === 'Y' ? ` · ¡van +${ev.stack}!` : k === 'G' && !ev.skip ? ' · ¡cambia la dirección!' : blk;
-      const choose = !elemOf(ev.c) ? ` y ${mine ? 'elegiste' : 'eligió'} ${ELEM_NAME[ev.s].toLowerCase()}` : '';
-      return `${who} ${mine ? 'jugaste' : 'jugó'} ${cardName(ev.c)}${choose}${extra}`;
-    }
-    if (ev.t === 'take') return `¡${who} ${mine ? 'te comiste' : 'se comió'} ${ev.k} cartas!`;
-    if (ev.t === 'draw') return `${who} ${mine ? 'robaste' : 'robó'} una carta`;
-    if (ev.t === 'pass') return `${who} ${mine ? 'pasaste' : 'pasó'}`;
-    return '';
-  }
-
-  function paintMsg() {
-    if (lg.win) { msgEl.innerHTML = ''; meBar.innerHTML = ''; passBtn.hidden = true; return; }
-    const cur = current(lg);
-    if (myTurn()) {
-      msgEl.className = 'oc-msg mine';
-      const canStack = lg.stack && myHand().some((c) => canPlay(lg, c));
-      msgEl.innerHTML = lg.stack
-        ? (canStack ? `¡Te tiran <b>+${lg.stack}</b>! Responde con un <b>+2</b> o <b>+4</b>, o cómete todo` : `¡Te tiran <b>+${lg.stack}</b>! No tienes con qué responder: toca el mazo`)
-        : lg.drawn ? 'Puedes jugar la carta que robaste o pasar'
-          : 'Tu turno: mismo <b>elemento</b> o mismo <b>número</b>';
-    } else {
-      msgEl.className = 'oc-msg';
-      msgEl.innerHTML = `Turno de <b style="color:${ctx.colorOf(cur)}">${esc(player(cur).n)}</b>${lg.stack ? ` · <b class="ca-warn">van +${lg.stack}</b>` : ''}`;
-    }
-    passBtn.hidden = !(myTurn() && lg.drawn && !lg.stack);
-    const hand = myHand();
-    meBar.innerHTML = hand
-      ? `<span class="oc-mechip ${myTurn() ? 'turn' : ''}" style="--c:${ctx.colorOf(me())}"><span class="oc-av">${avatarSVG(validAvatar(player(me()).a))}</span><b>Tú</b> · ${hand.length} carta${hand.length === 1 ? '' : 's'}${lg.wins[me()] ? ` · ${icon('trophy')}${lg.wins[me()]}` : ''}</span><span class="oc-timer mine"><i></i></span>`
-      : '';
-  }
-
-  function paintEnd() {
-    if (!lg.win) { endPanelHide(endEl); return; }
-    const won = lg.win === me();
-    
-    endEl.innerHTML = `
-      <div class="oc-end-box">
-        <div class="oc-end-av" style="--c:${ctx.colorOf(lg.win)}">${avatarSVG(validAvatar(player(lg.win).a))}</div>
-        <h2>${icon('trophy')} ${won ? '¡Ganaste!' : `¡Ganó ${esc(player(lg.win).n)}!`}</h2>
-        <ol class="oc-rank">${ranking(lg).map((id, i) => {
-          const n = (lg.hands[id] || []).length;
-          return `<li style="--c:${ctx.colorOf(id)}"><b>${i + 1}</b><span>${esc(player(id).n)}${id === me() ? ' (tú)' : ''}</span><small>${i === 0 ? 'sin cartas' : `${n} carta${n === 1 ? '' : 's'}`}</small><em>${icon('trophy')} ${lg.wins[id] || 0}</em></li>`;
-        }).join('')}</ol>
-        ${ctx.isHost()
-          ? `<button class="btn big primary" id="ca-again">${icon('repeat')} Otra partida</button><button class="btn ghost" id="ca-lobby">Volver a la sala</button>`
-          : '<p class="hint">Esperando al anfitrión para otra partida…</p>'}
-      </div>`;
-    if (ctx.isHost()) { $('#ca-again').onclick = () => ctx.again(); $('#ca-lobby').onclick = () => ctx.lobby(); }
-    endPanel(endEl, `${lg.tn}:${lg.win}`, 1800);
-  }
-
-  function sounds() {
-    const ev = lg.ev;
-    if (!ev) return;
-    const k = kindOf(ev.c || '');
-    if (ev.t === 'play') {
-      if (k === 'Y' || k === 'D') { sfx.hit(0.6 + Math.min(1, ev.stack / 12)); if (ev.stack >= 6) sfx.warn(); }
-      else if (k === 'X') sfx.coin();
-      else if (k === 'S' || k === 'G') sfx.whoosh();
-      else sfx.click();
-    } else if (ev.t === 'take') { sfx.boom(Math.min(1, 0.3 + ev.k / 16)); if (ev.p === me()) buzz(300); }
-    else if (ev.t === 'draw') sfx.land(1.5);
-  }
-
-  function paint() {
-    if (!lg) return;
-    paintOpps();
-    paintTable();
-    paintHand();
-    paintMsg();
-    paintEnd();
-    logEl.innerHTML = evText(lg.ev);
-    $('#ca-stop').hidden = !ctx.isHost() || !!lg.win;
-  }
-
-  const iv = setInterval(() => {
-    if (dead || !lg || lg.win) return;
-    const p = player(current(lg));
-    const total = p.off ? OFF_TURN_MS : TURN_MS;
-    const f = Math.max(0, total - (Date.now() - tnAt)) / total;
-    el.querySelectorAll('.oc-opp.turn .oc-timer i, .oc-mechip.turn + .oc-timer i').forEach((i) => { i.style.transform = `scaleX(${f})`; i.classList.toggle('low', f < 0.2); });
-    if (myTurn() && f < 0.2 && Date.now() - lastTick > 1000) { lastTick = Date.now(); sfx.tick(); }
-    if (pending && Date.now() - pendingAt > 3000) { pending = 0; paint(); }
-  }, 100);
-
-  return {
-    update(nst) {
-      const prevTurn = lg ? current(lg) : null;
-      st = nst;
-      lg = nst.lg;
-      if (!lg) return;
-      if (lg.tn !== seenTn) { seenTn = lg.tn; tnAt = Date.now(); }
-      if (pending && lg.tn !== pending) pending = 0;
-      const key = JSON.stringify(lg.ev);
-      const isNew = key !== lastEvKey;
-      if (isNew && lastEvKey !== '') sounds();
-      if (lg.win && isNew && lastEvKey !== '') setTimeout(() => { if (lg.win === me()) sfx.win(); else sfx.out(0.6); }, 400);
-      if (myTurn() && prevTurn !== me()) { sfx.ready(); buzz(lg.stack ? 120 : 40); }
-      paint();
-      lastEvKey = key;
-    },
-    destroy() { dead = true; clearInterval(iv); },
-  };
+  return mountCardGame(el, ctx, CAOS);
 }

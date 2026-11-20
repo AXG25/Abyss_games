@@ -235,6 +235,8 @@ const G = {
     return `{crown} ${pct(best)}%`;
   },
   endText: (p) => `{sparkle} ¡Pintaste el ${pct(p.n)}%!`,
+  // nadie queda eliminado: la ronda dura siempre los 45 s (aunque alguien se desconecte)
+  over: () => false,
   won: (p) => !p.all || (p.n || 0) >= Math.max(0, ...Object.values(p.all)),
   // barra con la parte del piso de cada color
   topText(t, W, ext) {

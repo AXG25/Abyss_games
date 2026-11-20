@@ -144,7 +144,7 @@ function run(el, ctx, use3d) {
     e.preventDefault();
     if (k < 0 || my[k] !== null) return;
     const R = P[k];
-    const el2 = performance.now() - t0 - R.run;
+    const el2 = clock() - R.run;
     if (el2 < 0 || el2 >= R.pop) return;
     my[k] = Math.round(el2);
     ctx.submit({ r: my });
@@ -161,9 +161,18 @@ function run(el, ctx, use3d) {
 
   // quien nunca se planta también participa (con 0 puntos), no "sin jugar"
   ctx.submit({ r: my });
+  let ended = false;
   let lastCreak = 0;
+  // Reloj del juego: corre ×4 cuando ya todos se plantaron y no
+  // queda nadie en riesgo (los puntos dependen del momento de cada uno dentro de
+  // su ronda, no del reloj, así que acelerar no cambia nada del resultado).
+  let vt = 0, lastReal = performance.now(), speed = 1;
+  const clock = () => vt + (performance.now() - lastReal) * speed;
   const iv = setInterval(() => {
-    const t = performance.now() - t0;
+    const nowR = performance.now();
+    vt += (nowR - lastReal) * speed;
+    lastReal = nowR;
+    const t = vt;
     const nk = P.findIndex((R) => t >= R.start && t < R.end);
     if (nk !== -1 && nk !== k) {
       k = nk;
@@ -207,7 +216,9 @@ function run(el, ctx, use3d) {
         }
       }
       for (const [id, c] of Object.entries(chips)) c.classList.toggle('last', id === lastId);
-    }
+      const allIn = players.every((p) => { const ms = msOf(p, k, live); return typeof ms === 'number' && ms <= el2; });
+      if (allIn && speed === 1) { speed = 4; showMsg('⏩ ¡Todos se plantaron!', 1500); sfx.whoosh(0.6); }
+    } else speed = 1;
     if (view) view.tick(Math.max(0, Math.min(el2, R.pop)), el2 >= R.pop);
     if (b2d) b2d.style.setProperty('--s', String(0.35 + Math.min(1, Math.max(0, el2) / 13000) * 0.85));
     // ¡BUM!
@@ -241,6 +252,12 @@ function run(el, ctx, use3d) {
       if (!validMs(my[k], R.pop)) { resEl.innerHTML = rich('{bomb} ¡Te explotó en la cara! 0 puntos'); sfx.out(0.6); }
       else if (lastId === ctx.me) { resEl.innerHTML = rich(`{crown} ¡El más valiente! <b>${mine}</b> puntos (×2)`); sfx.big(); }
       else resEl.innerHTML = rich(`{check} Te salvaste con <b>${mine}</b> puntos`);
+    }
+    if (k === ROUNDS - 1 && R._rev && el2 >= R.pop + REVEAL - 400 && !ended) {
+      ended = true;
+      const everyone = players.every((p) => P.every((_, kk) => typeof msOf(p, kk, live) === 'number'));
+      if (everyone && ctx.endEarly) ctx.endEarly();
+      else resEl.innerHTML += '<br><small>Esperando a los demás…</small>';
     }
   }, 30);
 

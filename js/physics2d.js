@@ -45,7 +45,7 @@ export class World {
     this.g = gravity;
     this.bodies = [];
     this.arbiters = new Map();
-    this.iterations = 12;
+    this.iterations = 16;
     this.onContact = null; // (A, B, normalImpulse) la primera vez que se tocan
   }
 
@@ -73,6 +73,10 @@ export class World {
   }
 
   wakeAll() { for (const b of this.bodies) if (b.dyn) { b.sleep = false; b.calm = 0; } }
+  // Despierta solo lo que está por encima de y0. La parte baja de una torre alta
+  // sigue dormida (firme como el suelo) y no acumula temblores; si de verdad se
+  // cae algo, los choques rápidos van despertando al resto.
+  wakeAbove(y0) { for (const b of this.bodies) if (b.dyn && b.box[3] > y0) { b.sleep = false; b.calm = 0; } }
 
   // vértices y normales en el mundo + caja envolvente
   sync(b) {

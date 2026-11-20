@@ -29,7 +29,6 @@ const KINDS = {
   plank: { pts: [[-1, -0.2], [1, -0.2], [1, 0.2], [-1, 0.2]], c: '#3a86ff', w: 3 },
   long: { pts: [[-1.4, -0.17], [1.4, -0.17], [1.4, 0.17], [-1.4, 0.17]], c: '#8338ec', w: 1 },
   pillar: { pts: [[-0.25, -0.7], [0.25, -0.7], [0.25, 0.7], [-0.25, 0.7]], c: '#06d6a0', w: 2 },
-  wedge: { pts: [[-0.65, -0.38], [0.65, -0.38], [0, 0.42]], c: '#fb5607', w: 1 },
   trap: { pts: [[-0.75, -0.3], [0.75, -0.3], [0.4, 0.3], [-0.4, 0.3]], c: '#ff006e', w: 2 },
 };
 const SHAPES = Object.fromEntries(Object.entries(KINDS).map(([k, v]) => [k, polygon(v.pts)]));
@@ -47,7 +46,7 @@ function pieces(seed) {
 }
 const hash = (s) => { let h = 2166136261; for (const ch of String(s)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; };
 // altura final de un bot y cómo va creciendo
-function botFinal(seed, id) { const r = mulberry32((seed ^ hash(id) ^ 0x7a11) >>> 0); return 3.2 + r() * 5.5; }
+function botFinal(seed, id) { const r = mulberry32((seed ^ hash(id) ^ 0x7a11) >>> 0); return 3 + r() * 9; }
 function botLive(seed, id, ms) {
   const f = botFinal(seed, id);
   const k = Math.max(0, Math.min(1, (ms - COUNT) / PLAY));
@@ -144,7 +143,7 @@ function run(el, ctx, use3d) {
     const blk = { b, kind, born: simMs, landed: false };
     b.data = { blk };
     blocks.push(blk);
-    world.wakeAll();
+    world.wakeAbove(towerH - 2.2);
     sfx.whoosh(0.5);
     buzz(25);
     if (view) view.add(blk);
@@ -257,6 +256,8 @@ function run(el, ctx, use3d) {
       const s = legend[p.id];
       if (s) { const t = (hs[p.id] || 0).toFixed(1); const bb = s.querySelector('b'); if (bb.textContent !== t) bb.textContent = t; }
     }
+    const order = [...players].sort((a, b) => (hs[b.id] || 0) - (hs[a.id] || 0));
+    order.forEach((p, i) => { const s = legend[p.id]; if (s) { s.style.order = i; s.classList.toggle('lead', i === 0 && (hs[p.id] || 0) > 0.2); } });
     // enviar mi altura de vez en cuando (la última que llega es la que cuenta)
     if (!finished && now - lastSend > 600 && Math.abs(towerH - lastSentH) > 0.05) {
       lastSend = now; lastSentH = towerH;

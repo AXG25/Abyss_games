@@ -230,8 +230,8 @@ Host.prototype.syncTurn = function (lg) {
   this.turnAt = now;
   const L = LONG_BY_ID[this.st.lgId];
   const [b0, b1] = (L && L.rules.BOT_MS) || [900, 1800];
-  // START_MS (opcional): pausa antes de la primera jugada (p. ej. mientras se ven repartir las cartas)
-  const start = lg.tn === 1 && L && L.rules.START_MS ? L.rules.START_MS : 0;
+  // pausa de los bots mientras se ve el reparto: pauseMs(lg) (opcional) o START_MS en la primera jugada
+  const start = !L ? 0 : L.rules.pauseMs ? L.rules.pauseMs(lg) : lg.tn === 1 && L.rules.START_MS ? L.rules.START_MS : 0;
   this.botAt = now + start + b0 + Math.random() * (b1 - b0);
 };
 

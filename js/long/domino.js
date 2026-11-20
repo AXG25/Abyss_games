@@ -12,6 +12,9 @@
 //    puede jugar (TRANQUE): ahí gana quien tenga menos puntos en la mano.
 //  - El ganador de la mano suma los puntos de las fichas de sus rivales.
 //    Gana la partida quien llegue primero a 100.
+//
+// Cada jugada queda en `lg.ev` (y las últimas 3 en `lg.hist`) con quién juega
+// después (next), para el historial y los avisos de la pantalla.
 import { mulberry32, shuffle } from '../util.js';
 
 export const TARGET = 100;
@@ -20,6 +23,9 @@ export const OFF_TURN_MS = 6000;
 export const BOT_MS = [800, 1500];
 const FORCED_MS = 1300;     // pasar o robar cuando no hay jugada: lo hace solo
 const HAND_MS = 8000;       // tiempo mostrando el resultado de la mano
+export const START_MS = 2200;
+// los bots esperan a que se vea el reparto al empezar cada mano
+export const pauseMs = (lg) => (lg.tn === 1 || (lg.ev && lg.ev.t === 'deal') ? START_MS : 0);
 
 export const ALL = [];
 for (let a = 0; a <= 6; a++) for (let b = a; b <= 6; b++) ALL.push(`${a}${b}`);
@@ -54,7 +60,7 @@ export function init(ids, seed, prevWins = {}) {
   const lg = {
     order, teams: order.length === 4, target: TARGET,
     score: {}, wins, hn: 1, seed: seed >>> 0,
-    turn: 0, tn: 1, ev: null, win: null, last: null, hand: null,
+    turn: 0, tn: 1, ev: null, hist: [], win: null, last: null, hand: null,
   };
   for (const s of sides(lg)) lg.score[s] = 0;
   deal(lg, seed);
@@ -83,6 +89,12 @@ export const playable = (lg, id) => (lg.hands[id] || []).filter((t) => sidesFor(
 
 function nextTurn(lg) {
   lg.turn = (lg.turn + 1) % lg.order.length;
+}
+
+// guarda la jugada en el historial (las 3 últimas) y anota quién sigue
+function logEv(lg) {
+  if (lg.phase === 'play') lg.ev.next = current(lg);
+  lg.hist = [...(lg.hist || []), lg.ev].slice(-3);
 }
 
 function endHand(lg, why, winner) {
@@ -131,6 +143,8 @@ export function act(lg, pid, a) {
     lg.starter = starter;
     lg.ev = { t: 'deal', p: starter, n: lg.hn };
     lg.tn++;
+    lg.hist = [];
+    logEv(lg);
     return true;
   }
   if (lg.phase !== 'play' || current(lg) !== pid) return false;
@@ -163,8 +177,9 @@ export function act(lg, pid, a) {
     lg.last = { p: pid, tile: t, side };
     lg.ev = { t: 'play', p: pid, tile: t, side, n: lg.tn };
     lg.tn++;
-    if (!hand.length) { endHand(lg, 'domino', pid); return true; }
+    if (!hand.length) { endHand(lg, 'domino', pid); logEv(lg); return true; }
     nextTurn(lg);
+    logEv(lg);
     return true;
   }
   if (a.t === 'draw') {
@@ -178,6 +193,7 @@ export function act(lg, pid, a) {
     }
     lg.ev = { t: 'draw', p: pid, k, n: lg.tn };
     lg.tn++;
+    logEv(lg);
     return true;
   }
   if (a.t === 'pass') {
@@ -185,8 +201,9 @@ export function act(lg, pid, a) {
     lg.passes++;
     lg.ev = { t: 'pass', p: pid, n: lg.tn };
     lg.tn++;
-    if (lg.passes >= lg.order.length) { endHand(lg, 'tranque', null); return true; }
+    if (lg.passes >= lg.order.length) { endHand(lg, 'tranque', null); logEv(lg); return true; }
     nextTurn(lg);
+    logEv(lg);
     return true;
   }
   return false;

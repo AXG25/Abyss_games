@@ -13,6 +13,11 @@
 //  - Gana quien se quede sin cartas.
 //
 // Cada carta tiene un id único: código + '#' + copia, p. ej. 'f7#1', 'rD#0', 'Y#3'.
+//
+// Cada jugada queda en `lg.ev` (y las últimas 3 en `lg.hist`) con lo que hace falta
+// para explicarla: el elemento que había antes de un comodín (was), a quién le
+// toca responder el +2/+4 (to) y cuánto va (stack), a quién se bloqueó (skip), si
+// cambió la dirección (rev), si la carta robada sirve (keep) y quién sigue (next).
 import { mulberry32, shuffle } from '../util.js';
 
 export const ELEMS = ['f', 'a', 'p', 'r'];
@@ -20,6 +25,7 @@ export const ELEM_NAME = { f: 'Fuego', a: 'Agua', p: 'Planta', r: 'Rayo' };
 export const TURN_MS = 30000;
 export const OFF_TURN_MS = 6000;
 export const BOT_MS = [800, 1500];
+export const START_MS = 2600;      // los bots esperan a que se vea el reparto de cartas
 
 export const codeOf = (c) => c.split('#')[0];
 export const elemOf = (c) => { const k = codeOf(c); return ELEMS.includes(k[0]) ? k[0] : null; };
@@ -54,7 +60,7 @@ export function init(ids, seed, prevWins = {}) {
     order: ids.slice(), hands, draw, disc: [top], elem: elemOf(top),
     turn: Math.floor(r() * ids.length), dir: 1,
     stack: 0,          // cartas acumuladas por +2 / +4 que debe comerse el siguiente
-    drawn: null, tn: 1, ev: null, win: null, wins,
+    drawn: null, tn: 1, ev: null, hist: [], win: null, wins,
     seed: (seed * 31 + 7) >>> 0,
   };
 }
@@ -91,6 +97,12 @@ function endTurn(lg, steps = 1) {
   lg.tn++;
 }
 
+// guarda la jugada en el historial (las 3 últimas) y anota quién sigue
+function logEv(lg) {
+  if (!lg.win) lg.ev.next = current(lg);
+  lg.hist = [...(lg.hist || []), lg.ev].slice(-3);
+}
+
 export function bestElem(hand) {
   const n = { f: 0, a: 0, p: 0, r: 0 };
   for (const c of hand) { const e = elemOf(c); if (e) n[e]++; }
@@ -108,23 +120,28 @@ export function act(lg, pid, a) {
     if (i < 0 || !canPlay(lg, c)) return false;
     hand.splice(i, 1);
     lg.disc.push(c);
+    const was = lg.elem;
     lg.elem = isWild(c) ? (ELEMS.includes(a.s) ? a.s : bestElem(hand)) : elemOf(c);
     lg.stack += drawValue(c);
     lg.ev = { p: pid, t: 'play', c, s: lg.elem, stack: lg.stack, n: lg.tn };
+    if (isWild(c)) lg.ev.was = was;
     if (!hand.length) {
       // gana aunque haya quedado un castigo pendiente
       lg.win = pid;
       lg.wins[pid] = (lg.wins[pid] || 0) + 1;
       lg.drawn = null;
       lg.tn++;
+      logEv(lg);
       return true;
     }
     const k = kindOf(c);
     let steps = 1;
     if (k === 'S') steps = 2;
-    else if (k === 'G') { if (lg.order.length === 2) steps = 2; else lg.dir *= -1; }
+    else if (k === 'G') { if (lg.order.length === 2) steps = 2; else { lg.dir *= -1; lg.ev.rev = 1; } }
     if (steps === 2) lg.ev.skip = lg.order[nextIdx(lg, 1)];   // a quién se le bloqueó el turno
+    if (isDraw(c)) lg.ev.to = lg.order[nextIdx(lg, 1)];        // quién debe responder o comerse todo
     endTurn(lg, steps);
+    logEv(lg);
     return true;
   }
   if (a.t === 'draw') {
@@ -136,22 +153,25 @@ export function act(lg, pid, a) {
       lg.stack = 0;
       lg.ev = { p: pid, t: 'take', k: got, n: lg.tn };
       endTurn(lg);
+      logEv(lg);
       return true;
     }
     if (lg.drawn) return false;
     const c = takeCard(lg);
     lg.ev = { p: pid, t: 'draw', k: c ? 1 : 0, n: lg.tn };
-    if (!c) { endTurn(lg); return true; }
+    if (!c) { endTurn(lg); logEv(lg); return true; }
     hand.push(c);
     lg.drawn = c;
     if (!canPlay(lg, c)) endTurn(lg);
-    else lg.tn++;
+    else { lg.tn++; lg.ev.keep = 1; }
+    logEv(lg);
     return true;
   }
   if (a.t === 'pass') {
     if (!lg.drawn) return false;
     lg.ev = { p: pid, t: 'pass', n: lg.tn };
     endTurn(lg);
+    logEv(lg);
     return true;
   }
   return false;

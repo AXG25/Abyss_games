@@ -400,6 +400,10 @@ input:focus { border-color: var(--yellow); }
 .sw-stage { flex: 1; width: 100%; position: relative; min-height: 40vh; border-radius: 24px; overflow: hidden; display: grid; place-items: center; }
 .sw-res { min-height: 26px; font-size: 18px; text-align: center; }
 .sw-res b { color: var(--yellow); }
+/* Bajada nevada: barra de avance hacia la meta */
+.sn-bar { position: relative; display: block; width: min(60vw, 240px); height: 12px; border-radius: 99px; background: rgba(255, 255, 255, 0.25); border: 2px solid #fff; }
+.sn-bar i { position: absolute; top: 50%; width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; border: 2px solid #fff; }
+.sn-bar b { position: absolute; right: -24px; top: 50%; transform: translateY(-50%); font-size: 16px; font-weight: 400; }
 /* ¿Dónde está? */
 .fi-top b { color: var(--c); text-shadow: 0 2px 0 rgba(0, 0, 0, 0.6); font-size: 24px; }
 .fi-stage { min-height: 50vh; touch-action: none; }

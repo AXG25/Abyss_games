@@ -268,7 +268,7 @@ export function createView3D(board, G, W, opts = {}) {
 
   const particles = new Particles(scene);
   scene.add(sun.target);
-  const S = { THREE, scene, camera, renderer, board, sun, W, objs: {}, t: 0, particles, makeWater, emojiTexture, avatarTexture, std, makeHead: (id, r) => makeHead(THREE, id, r), makeGhost: (r) => makeGhost(THREE, r) };
+  const S = { THREE, scene, camera, renderer, board, sun, W, objs: {}, t: 0, particles, makeWater, emojiTexture, avatarTexture, std, makeHead: (id, r) => makeHead(THREE, id, r), makeGhost: (r) => makeGhost(THREE, r), makeCharacter };
   let shakeAmt = 0;
   S.shake = (a) => { shakeAmt = Math.min(0.08, Math.max(shakeAmt, a)); };
   S.burst = (x, y, z, o) => particles.burst(x, y, z, o);

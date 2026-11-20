@@ -1,32 +1,53 @@
-// 🏂 Bajada nevada — tiempo real (3D). Todos bajan una montaña en snowboard:
-// el joystick mueve de lado a lado (arriba acelera, abajo frena) y SALTA pasa
-// por encima de rocas y troncos. Los árboles hay que esquivarlos. Las rampas te
-// mandan a volar con impulso. Quien choca queda eliminado. La ronda termina
-// cuando queda uno solo o cuando todos los que siguen en pie llegan a la meta.
+// 🏂 Bajada nevada — tiempo real (3D), a 3 rondas. Todos bajan una montaña en
+// snowboard: el joystick mueve de lado a lado (arriba acelera, abajo frena) y
+// SALTA pasa por encima de rocas y troncos. Los árboles hay que esquivarlos. Las
+// rampas te mandan a volar con impulso. Quien choca queda fuera de ESA bajada.
+// Cada bajada termina cuando queda uno solo, cuando todos los que siguen en pie
+// llegan a la meta o a los RMAX segundos. Cada ronda reparte puntos según el
+// puesto (le ganas a alguien = +1) y tras 3 bajadas gana quien sume más.
 //
-// La pista sale de la semilla (todos bajan la misma). No hay choques entre
-// jugadores: cada teléfono simula a su jugador contra la pista.
+// Cada ronda tiene su propia pista (sale de la semilla: todos bajan la misma).
+// No hay choques entre jugadores: cada teléfono simula a su jugador contra la
+// pista. El anfitrión hace de árbitro (`hs`): cuándo empieza y termina cada
+// bajada y los puntos; todos los teléfonos lo siguen.
 import { mulberry32, COLORS } from '../util.js';
 import { DT, TAU, mountRT, simulateBot, newPlayerBase, drawPlayer } from '../rt.js';
 
-const TOTAL = 55;
+const ROUNDS = 3;
+const READY = 2.5;      // s quietos en la salida antes de cada bajada
+const SHOW = 3.5;       // s mostrando el resultado de la bajada
+const RMAX = 30;        // tope de cada bajada
+const TOTAL = ROUNDS * (READY + RMAX + SHOW) + 2;
 const LEN = 34;         // largo de la pista (la meta está en y = -LEN)
 const HW = 0.85;        // medio ancho de la pista
 const PR = 0.05;
-const V0 = 0.78, VMAX = 1.4, ACC = 0.016;   // velocidad de bajada
-const LAT = 1.25;       // velocidad de lado a lado
-const JUMP_V = 2.7, GRAV = 8, JUMP_CD = 0.9;
+// todo un 50 % más rápido que la primera versión
+const SPD = 1.5;
+const V0 = 0.78 * SPD, VMAX = 1.4 * SPD, ACC = 0.016 * SPD * SPD;   // velocidad de bajada
+const LAT = 1.25 * 1.45;  // velocidad de lado a lado
+const JUMP_V = 2.7, GRAV = 8, JUMP_CD = 0.8;
 const RAMP_V = 3.3;
 const CLEAR = 0.22;     // altura para pasar por encima de rocas y troncos
 const M = 10;           // metros por unidad (para mostrar)
-// Cámara de espectador: si ya me eliminaron, sigue al que va primero en pie.
+
+// Estado del árbitro. Sin árbitro (simulación de bots) es una sola bajada desde t = 0.
+const HS0 = { rd: 0, rs: 0, ph: 'go', pts: {}, tb: {} };
+const hsOf = (ext) => (ext && ext.hs) || HS0;
+const rdOf = (e) => (e.e && typeof e.e.r === 'number' ? e.e.r : e.rd ?? 0);
+const esc = (x) => String(x ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nameOf = (hs, id) => esc((hs.n && hs.n[id]) || '¿?');
+// Árbitro final de cada partida (solo en el teléfono anfitrión), para puntuar.
+const FINAL = new Map();
+
+// Cámara de espectador: si ya choqué, sigue al que va primero en pie.
 let ME = null;
 const SPEC = { on: false, x: 0, y: 0 };
 function spectate(ents) {
   const me = ents.find((e) => e.id === ME);
   SPEC.on = false;
   if (!me || !me.out) return me;
-  const lead = ents.filter((e) => !e.out).sort((a, b) => a.y - b.y)[0];
+  const rd = rdOf(me);
+  const lead = ents.filter((e) => !e.out && rdOf(e) === rd).sort((a, b) => a.y - b.y)[0];
   if (!lead) return me;
   SPEC.on = true; SPEC.x = lead.x; SPEC.y = lead.y;
   return lead;
@@ -34,17 +55,33 @@ function spectate(ents) {
 
 // (en la red va como `fn`: `f` y `d` ya los usa la vista 3D para la escala y el impulso)
 const finOf = (e) => (typeof e.fin === 'number' ? e.fin : e.e && typeof e.e.fn === 'number' ? e.e.fn : null);
+const courseOf = (W, p) => W.courses[Math.max(0, Math.min(ROUNDS - 1, (p && p.rd) || 0))];
+
+// Qué tan bien le fue a alguien en la bajada (mayor = mejor): llegar a la meta
+// (antes es mejor) > seguir en pie (más lejos es mejor) > chocar (más lejos es mejor).
+function perf(e, rd) {
+  if (!e || rdOf(e) !== rd) return 0;
+  const f = finOf(e);
+  if (f != null) return 1000 + Math.max(0, RMAX + 5 - f) * 10;
+  return (e.out ? 0 : 200) + Math.max(0, Math.min(LEN, -e.y));
+}
+
+// Pone a un jugador en la salida para la bajada `rd`.
+function toStart(p, rd) {
+  Object.assign(p, { x: p.sx ?? 0, y: 0.2, z: 0, vx: 0, vz: 0, v: 0, boost: 0, fin: null, out: false, tOut: 0, hit: null, dcd: 0, act: false, rd });
+}
 
 // ---------------------------------------------------------------- pista
-function buildCourse(seed) {
-  const r = mulberry32(seed ^ 0x5a0b);
+function buildCourse(seed, rd) {
+  const r = mulberry32((seed ^ 0x5a0b ^ Math.imul(rd + 1, 0x9e3779b1)) >>> 0);
   const obs = [];
   let y = -2.6;
   let safeX = 0, prevY = 0.2;
   const path = []; // el camino libre garantizado (y, x) — también lo usan los bots
+  const hard = rd * 0.35; // cada bajada trae un poco más de obstáculos
   while (y > -LEN + 1.2) {
     const k = -y / LEN; // 0 arriba → 1 abajo
-    const n = 1 + Math.floor(r() * (1.6 + k * 2.2));
+    const n = 1 + Math.floor(r() * (1.6 + hard + k * 2.2));
     const row = [];
     for (let i = 0; i < n; i++) {
       const roll = r();
@@ -76,17 +113,25 @@ function buildCourse(seed) {
     prevY = y;
     path.push([y, safeX]);
     obs.push(...row);
-    y -= 0.62 - k * 0.12 + r() * 0.2;
+    // filas más separadas que antes: a más velocidad hace falta más espacio para reaccionar
+    y -= 0.72 - k * 0.12 + r() * 0.22;
   }
   obs.sort((a, b) => b.y - a.y); // de arriba hacia abajo
-  // árboles de adorno fuera de la pista
+  return { obs, path };
+}
+
+function buildWorld(seed) {
+  const courses = [];
+  for (let rd = 0; rd < ROUNDS; rd++) courses.push(buildCourse(seed, rd));
+  // árboles de adorno fuera de la pista (los mismos en todas las bajadas)
+  const r = mulberry32((seed ^ 0xdec0) >>> 0);
   const deco = [];
   for (let yy = 3; yy > -LEN - 6; yy -= 0.22) {
     for (const s of [-1, 1]) {
       if (r() < 0.75) deco.push({ x: s * (HW + 0.25 + r() * 1.8), y: yy + r() * 0.2, s: 0.8 + r() * 0.9 });
     }
   }
-  return { obs, deco, path };
+  return { seed, courses, deco };
 }
 
 // Centro de un hueco de al menos 0.3 entre los obstáculos de una fila que quede a
@@ -122,33 +167,102 @@ export const G = {
   snapDist: 0.8,
   cd1: (p) => (p.dcd > 0 ? p.dcd / JUMP_CD : 0),
 
-  world(seed) { return buildCourse(seed); },
+  world(seed) { return buildWorld(seed); },
 
   spawn(i) {
-    const p = newPlayerBase(-0.45 + (i % 4) * 0.3, 0.2, 1);
-    Object.assign(p, { vx: 0, vz: 0, boost: 0, fin: null, rampT: -9, bumpT: -9 });
+    const p = newPlayerBase(0, 0.2, 1);
+    p.sx = -0.45 + (i % 4) * 0.3;
+    toStart(p, 0);
+    Object.assign(p, { rampT: -9, bumpT: -9, pts: 0 });
+    delete p.rd;       // se fija en el primer paso, según el árbitro
     return p;
   },
 
-  step(p, inp, t, W) {
+  // ---- árbitro (solo el anfitrión)
+  hostInit(W, players) {
+    const hs = {
+      rd: 0, rs: 0, ph: 'go', pts: {}, tb: {}, win: null, pl: null, done: null,
+      n: Object.fromEntries(players.map((p) => [p.id, String(p.n || '').slice(0, 12)])),
+    };
+    if (FINAL.size > 20) FINAL.clear();
+    FINAL.set(W.seed, hs);
+    return hs;
+  },
+  hostTick(hs, t, W, all, players) {
+    if (hs.done) return;
+    if (hs.ph === 'end') {
+      if (t >= hs.pe) { hs.rd++; hs.ph = 'go'; hs.rs = t + READY; hs.win = null; hs.pl = null; }
+      return;
+    }
+    const rt = t - hs.rs;
+    if (rt < 0.6) return;
+    // con red lenta, alguien puede tardar en empezar la bajada: cuenta como en pie un rato
+    const late = rt < 3;
+    const alive = all.filter((e) => e && (rdOf(e) === hs.rd ? !e.out : late));
+    const many = players.length > 1;
+    let end = rt >= RMAX || !alive.length;
+    if (!end && many && alive.length === 1 && rdOf(alive[0]) === hs.rd && finOf(alive[0]) == null) end = true;
+    if (!end && alive.every((e) => rdOf(e) === hs.rd && finOf(e) != null)) end = true;
+    if (!end) return;
+    // puntos: +1 por cada uno al que le ganaste en esta bajada
+    const sc = players.map((p) => ({ id: p.id, v: perf(all.find((e) => e && e.id === p.id), hs.rd) }));
+    sc.sort((a, b) => b.v - a.v);
+    hs.pl = {};
+    for (const a of sc) {
+      const beat = sc.filter((b) => b.v < a.v).length;
+      hs.pts[a.id] = (hs.pts[a.id] || 0) + beat;
+      hs.tb[a.id] = Math.round(((hs.tb[a.id] || 0) + a.v) * 10) / 10;
+      hs.pl[a.id] = 1 + sc.filter((b) => b.v > a.v).length;
+    }
+    hs.win = sc.length && sc[0].v > 0 && (sc.length < 2 || sc[1].v < sc[0].v) ? sc[0].id : '';
+    hs.ph = 'end';
+    hs.pe = t + SHOW;
+    if (hs.rd >= ROUNDS - 1) {
+      const fin = players.map((p) => p.id).sort((a, b) => (hs.pts[b] || 0) - (hs.pts[a] || 0) || (hs.tb[b] || 0) - (hs.tb[a] || 0));
+      hs.done = fin[0] || '-';
+      hs.fin = t + SHOW;
+    }
+  },
+  // Aplica lo que decidió el árbitro a un jugador local (el mío o un bot).
+  applyHost(p, hs) {
+    p.pts = (hs.pts && hs.pts[p.id]) || 0;
+    p.champ = !!hs.done && hs.done === p.id;
+    if (p.rd !== undefined && p.rd !== hs.rd) toStart(p, hs.rd);
+    return null;
+  },
+  // termina tras la última bajada (lo decide el anfitrión)
+  over: (all, t, ext) => !!(ext && ext.hs && ext.hs.done && t >= ext.hs.fin),
+  won: (p) => !!p.champ,
+
+  step(p, inp, t, W, ext) {
     p._ev = null;
+    const hs = hsOf(ext);
+    if (p.rd === undefined) p.rd = hs.rd;
     if (p.out) return null;
-    // después de la meta: frenar suave
-    if (p.fin != null) {
-      const v = Math.max(0, 1 - (t - p.fin) * 0.8);
-      p.y -= v * DT;
-      p.x *= 1 - DT * 2;
-      p.z = Math.max(0, p.z - DT * 2);
+    const rt = t - hs.rs;
+    // antes de la bajada: quietos en la salida
+    if (rt < 0) { p.act = false; p.v = 0; return null; }
+    // después de la meta o con la bajada terminada: frenar suave
+    if (p.fin != null || hs.ph === 'end') {
+      p.v = Math.max(0, (p.v || 0) - DT * 1.4);
+      p.y -= p.v * DT;
+      if (p.fin != null) p.x *= 1 - DT * 2;
+      p.vz -= GRAV * DT;
+      p.z = Math.max(0, p.z + p.vz * DT);
+      if (p.z === 0) p.vz = 0;
+      p.act = false;
       return null;
     }
+    const obs = courseOf(W, p).obs;
     // velocidad de bajada (sube con el tiempo); arriba acelera, abajo frena
-    const base = Math.min(VMAX, V0 + ACC * t);
+    const base = Math.min(VMAX, V0 + ACC * rt);
     const pedal = inp.y < -0.3 ? 1.22 : inp.y > 0.3 ? 0.68 : 1;
     p.boost = Math.max(0, p.boost - DT * 0.45);
     const v = base * pedal + p.boost;
+    p.v = v;
     // de lado a lado, con un poco de inercia (como tallar la nieve)
     const want = Math.max(-1, Math.min(1, inp.x)) * LAT;
-    p.vx += (want - p.vx) * Math.min(1, DT * 7);
+    p.vx += (want - p.vx) * Math.min(1, DT * 8);
     p.x += p.vx * DT;
     p.y -= v * DT;
     // salto
@@ -167,21 +281,20 @@ export const G = {
       if (t - p.bumpT > 0.4) { p.bumpT = t; p._ev = 'bump'; }
     }
     // obstáculos cercanos
-    const obs = W.obs;
     for (let i = firstBelow(obs, p.y + 0.25); i < obs.length && obs[i].y > p.y - 0.25; i++) {
       const o = obs[i];
       if (o.t === 'tree' || o.t === 'rock') {
         if (Math.hypot(p.x - o.x, p.y - o.y) < o.r + PR * 0.7) {
           if (o.t === 'rock' && p.z > CLEAR) continue;
           if (o.t === 'tree' && p.z > 0.55) continue;
-          p.out = true; p.tOut = t; p.hit = o.t;
-          return 'out';
+          p.out = true; p.tOut = rt; p.hit = o.t;
+          return 'crash';
         }
       } else if (Math.abs(p.x - o.x) < o.hw + PR * 0.6 && Math.abs(p.y - o.y) < o.hd + PR * 0.5) {
         if (o.t === 'log') {
           if (p.z > CLEAR * 0.8) continue;
-          p.out = true; p.tOut = t; p.hit = 'log';
-          return 'out';
+          p.out = true; p.tOut = rt; p.hit = 'log';
+          return 'crash';
         }
         if (o.t === 'ramp' && p.z < 0.08 && t - p.rampT > 0.5) {
           p.rampT = t; p.vz = RAMP_V; p.boost = 0.45; p._ev = 'ramp';
@@ -189,22 +302,22 @@ export const G = {
       }
     }
     // ¡meta!
-    if (p.y <= -LEN) { p.fin = t; return 'finish'; }
+    if (p.y <= -LEN) { p.fin = Math.round(rt * 100) / 100; return 'finish'; }
     return p._ev;
   },
 
   brain(seed, idx, W) {
     const r = mulberry32((seed ^ (0x51ed27 * (idx + 1))) >>> 0);
     const skill = 0.5 + r() * 0.45;
-    const look = 0.35 + skill * 0.75;
+    const look = (0.35 + skill * 0.75) * 1.4;
     let tx = 0, next = 0, noise = 0, rush = false;
     return (p, t) => {
+      const obs = courseOf(W, p).obs;
       if (t >= next) {
-        next = t + 0.12 + (1 - skill) * 0.15;
+        next = t + 0.1 + (1 - skill) * 0.12;
         noise = (r() - 0.5) * (1 - skill) * 0.25;
         rush = r() < skill * 0.5;
         // elegir el carril más despejado de lo que viene
-        const obs = W.obs;
         const i0 = firstBelow(obs, p.y - 0.02);
         let best = p.x, bc = Infinity;
         for (let x = -HW + 0.1; x <= HW - 0.1; x += 0.05) {
@@ -221,58 +334,80 @@ export const G = {
       }
       // saltar rocas y troncos que vienen justo en frente
       if (p.dcd <= 0 && p.z <= 0) {
-        const obs = W.obs;
-        for (let i = firstBelow(obs, p.y - 0.02); i < obs.length && obs[i].y > p.y - 0.3; i++) {
+        for (let i = firstBelow(obs, p.y - 0.02); i < obs.length && obs[i].y > p.y - 0.45; i++) {
           const o = obs[i];
-          if ((o.t === 'rock' || o.t === 'log') && Math.abs(o.x - p.x) < (o.hw || o.r) + 0.06 && p.y - o.y < 0.12 + skill * 0.12 && r() < 0.35 + skill * 0.5) { p.act = true; break; }
+          if ((o.t === 'rock' || o.t === 'log') && Math.abs(o.x - p.x) < (o.hw || o.r) + 0.06 && p.y - o.y < (0.12 + skill * 0.12) * SPD && r() < 0.35 + skill * 0.5) { p.act = true; break; }
         }
       }
       return { x: Math.max(-1, Math.min(1, (tx - p.x) * 7)), y: rush ? -0.6 : 0 };
     };
   },
 
-  // termina cuando queda uno solo, o cuando todos los que siguen en pie ya llegaron
-  over(all, t) {
-    if (!all.length) return false;
-    const alive = all.filter((e) => !e.out);
-    if (!alive.length) return true;
-    if (all.length > 1 && alive.length <= 1 && finOf(alive[0]) == null) return true;
-    return alive.every((e) => finOf(e) != null);
-  },
-
-  result: (p) => ({ fin: p.fin, d: Math.round(Math.max(0, -p.y) * 100) / 100, out: p.out ? 1 : 0, t: p.out ? Math.round(p.tOut * 1000) : null }),
-  pack: (p) => ({ vx: Math.round(p.vx * 100) / 100, fn: p.fin }),
+  result: (p) => ({ pts: p.pts || 0, fin: p.fin, d: Math.round(Math.max(0, -p.y) * 100) / 100, out: p.out ? 1 : 0 }),
+  pack: (p) => ({ vx: Math.round(p.vx * 100) / 100, fn: p.fin, r: p.rd || 0 }),
   hud(p) {
     if (p.fin != null) return `{flag} ${p.fin.toFixed(1)} s`;
     if (p.out) return '{ghost}';
     return `{flag} ${Math.max(0, Math.round((LEN + p.y) * M))} m`;
   },
   hudRight(ents) {
-    const alive = ents.filter((e) => !e.out).length;
-    return `{people} ${alive}`;
+    const me = ents.find((e) => e.id === ME);
+    const rd = me ? rdOf(me) : 0;
+    return `{people} ${ents.filter((e) => !e.out && rdOf(e) === rd).length}`;
   },
-  endText: (p) => (p.fin != null ? '{flag} ¡Llegaste a la meta!' : '{trophy} ¡Sigues en pie!'),
-  won: (p) => !p.out,
+  timeText: (t, ext) => `R${Math.min(ROUNDS, hsOf(ext).rd + 1)}/${ROUNDS}`,
+  endText: (p) => (p.champ ? '{trophy} ¡Ganaste la bajada nevada!' : `{flag} Fin · ${p.pts || 0} pts`),
+  // marcador entre bajadas (durante la bajada se ve la barra de avance)
+  board(t, ext) {
+    const hs = hsOf(ext);
+    if (!hs.n) return null;
+    const ids = Object.keys(hs.n).sort((a, b) => (hs.pts[b] || 0) - (hs.pts[a] || 0));
+    const table = ids.map((id) => `${nameOf(hs, id)} <b>${hs.pts[id] || 0}</b>`).join(' · ');
+    if (hs.ph === 'end') {
+      if (hs.done && hs.done !== '-') return `{trophy} ¡${nameOf(hs, hs.done)} gana la bajada nevada!<br>${table}`;
+      return `${hs.win ? `{trophy} ${nameOf(hs, hs.win)} gana la bajada ${hs.rd + 1}` : `Fin de la bajada ${hs.rd + 1}`}<br>${table}`;
+    }
+    if (t < hs.rs) return '';   // el cartel de "Bajada N" ocupa la parte de arriba
+    return null;
+  },
+  banner(t, W, ext) {
+    const hs = hsOf(ext);
+    if (hs.ph !== 'go') return null;
+    const rt = t - hs.rs;
+    if (rt < 0) return { text: `Bajada ${hs.rd + 1} de ${ROUNDS}`, color: '#0077b6' };
+    if (rt < 1.2) return { text: hs.rd ? `Bajada ${hs.rd + 1} · ¡A bajar!` : `Bajada 1 de ${ROUNDS} · ¡A bajar!`, color: '#ef233c' };
+    if (rt > RMAX - 5) return { text: `{timer} ¡${Math.max(1, Math.ceil(RMAX - rt))} s para la meta!`, color: '#f77f00' };
+    return null;
+  },
 
   music: 'race',
   events(t0, t1, W, ext, ents, fx) {
     const st = fx.st;
     const me = fx.me;
-    if (!st.seen) { st.seen = new Set(); st.fin = new Set(); st.ramp = me.rampT; st.bump = me.bumpT; }
+    const hs = hsOf(ext);
+    const rd = me.rd ?? 0;
+    if (st.rd !== rd) {
+      // bajada nueva
+      if (st.rd !== undefined) fx.msg(`{flag} Bajada ${rd + 1}`, 900);
+      st.rd = rd; st.fin = new Set(); st.specMsg = 0;
+      if (st.seen === undefined) { st.seen = new Set(); st.ramp = me.rampT; st.bump = me.bumpT; }
+    }
     // nieve que cae alrededor
     for (let i = 0; i < 2; i++) fx.burst(me.x + (Math.random() - 0.5) * 3, 1.3, me.y - Math.random() * 2.5, { n: 1, color: ['#ffffff'], speed: 0.05, up: 0, size: 0.025, life: 2.4, gravity: 0.35, drag: 0.2 });
     // polvo de nieve al tallar
     if (!me.out && me.fin == null && me.z <= 0 && Math.abs(me.vx) > 0.6 && Math.random() < 0.5) fx.burst(me.x, 0.02, me.y + 0.04, { n: 2, color: ['#ffffff', '#e0f2ff'], speed: 0.25, up: 0.3, size: 0.03, life: 0.4, gravity: 1.5 });
     if (me.rampT !== st.ramp) { st.ramp = me.rampT; fx.sfx.launch(); fx.msg('{rocket} ¡A volar!', 800); fx.burst(me.x, 0.05, me.y, { n: 24, color: ['#ffffff', '#caf0f8'], speed: 0.6, up: 0.9, size: 0.04, life: 0.6, gravity: 2 }); }
     if (me.bumpT !== st.bump) { st.bump = me.bumpT; fx.sfx.thud(0.6); fx.shake(0.02); }
-    if (me.out && !st.specMsg && ents.some((e) => !e.out)) { st.specMsg = 1; setTimeout(() => fx.msg('{eye} Mirando al que va primero', 1800), 1300); }
+    if (me.out && !st.specMsg && ents.some((e) => !e.out && rdOf(e) === rd)) { st.specMsg = 1; setTimeout(() => fx.msg('{eye} Mirando al que va primero', 1800), 1300); }
     for (const e of ents) {
+      if (rdOf(e) !== rd) continue;
       // alguien chocó
-      if (e.out && !st.seen.has(e.id)) {
-        st.seen.add(e.id);
+      const key = e.id + ':' + rd;
+      if (e.out && !st.seen.has(key)) {
+        st.seen.add(key);
         fx.sfx.thud(e.id === me.id ? 1 : 0.5);
         fx.sfx.crack(0.5);
-        if (e.id === me.id) fx.shake(0.06);
+        if (e.id === me.id) { fx.shake(0.06); fx.sfx.out(); fx.msg('{ghost} ¡Chocaste!', 1300); }
         fx.burst(e.x, 0.1, e.y, { n: 40, color: ['#ffffff', '#e0f2ff', '#adb5bd'], speed: 0.9, up: 1.2, size: 0.05, life: 0.9, gravity: 2.5 });
       }
       // alguien llegó a la meta
@@ -282,12 +417,19 @@ export const G = {
         const place = st.fin.size;
         if (e.id === me.id) {
           fx.sfx.win();
-          fx.msg(`{flag} ¡Llegaste ${place}º!`, 0);
+          fx.msg(`{flag} ¡Llegaste ${place}º!`, 2200);
           fx.burst(e.x, 0.3, e.y, { n: 70, color: ['#ffd60a', '#ff4d6d', '#3a86ff', '#06d6a0', '#ffffff'], speed: 1, up: 2, size: 0.05, life: 1.6, gravity: 2.5 });
         } else fx.sfx.whistle(0.5);
       }
     }
-    for (let k = 1; k <= 5; k++) { const tt = TOTAL - k; if (tt > t0 && tt <= t1) fx.sfx.count(); }
+    // fin de bajada
+    if (hs.ph === 'end' && st.ended !== hs.rd) {
+      st.ended = hs.rd;
+      if (hs.win === me.id || (hs.done && hs.done === me.id)) fx.sfx.win();
+      else fx.sfx.whistle(0.7);
+    }
+    // cuenta regresiva del tope de la bajada
+    if (hs.ph === 'go') for (let k = 1; k <= 5; k++) { const tt = hs.rs + RMAX - k; if (tt > t0 && tt <= t1) fx.sfx.count(); }
   },
 
   PR,
@@ -300,7 +442,7 @@ export const G = {
     camFit: 1.05,
     camFitZ: 1.0,
     jumpH: 0.6,
-    lookAhead: (e) => (SPEC.on ? { x: SPEC.x * 0.4 - e.x, y: SPEC.y - e.y - 0.9 } : { x: -e.x * 0.6, y: -0.9 }),
+    lookAhead: (e) => (SPEC.on ? { x: SPEC.x * 0.4 - e.x, y: SPEC.y - e.y - 1.05 } : { x: -e.x * 0.6, y: -1.05 }),
     trailColor: ['#ffffff', '#caf0f8'],
     splashColor: ['#ffffff', '#e0f2ff'],
     setup(S, W) { buildScene(S, W); },
@@ -308,6 +450,9 @@ export const G = {
       const o = S.objs;
       for (const f of o.flags) f.rotation.y = Math.sin(t * 3 + f.userData.ph) * 0.4;
       o.banner.position.y = 0.62 + Math.sin(t * 2) * 0.01;
+      const me = ents.find((e) => e.id === ME);
+      const rd = Math.max(0, Math.min(ROUNDS - 1, me ? rdOf(me) : 0));
+      o.courses.forEach((g, i) => { g.visible = i === rd; });
       spectate(ents);
     },
     makeAvatar: (S, e, U) => makeRider(S, e, U),
@@ -317,8 +462,10 @@ export const G = {
   draw(g, v, t, W, ents, meId) {
     const size = v.size, c = size / 2;
     const me = spectate(ents) || ents[0];
+    const mine = ents.find((e) => e.id === meId) || me;
+    const course = courseOf(W, { rd: mine ? rdOf(mine) : 0 });
     const s = size / (2 * (HW + 0.25));
-    const cy = (me ? me.y : 0) - 0.55;
+    const cy = (me ? me.y : 0) - 0.65;
     const X = (x) => c + x * s, Y = (y) => c + (y - cy) * s;
     g.fillStyle = '#dbeafe'; g.fillRect(0, 0, size, size);
     g.fillStyle = '#ffffff'; g.fillRect(X(-HW), 0, HW * 2 * s, size);
@@ -328,7 +475,7 @@ export const G = {
     const fy = Y(-LEN);
     if (fy > -20 && fy < size + 20) for (let i = 0; i < 12; i++) { g.fillStyle = i % 2 ? '#1b1035' : '#fff'; g.fillRect(X(-HW) + (i * HW * 2 * s) / 12, fy - 5, (HW * 2 * s) / 12, 10); }
     const yTop = cy - c / s - 0.3, yBot = cy + c / s + 0.3;
-    for (const o of W.obs) {
+    for (const o of course.obs) {
       if (o.y > yBot || o.y < yTop) continue;
       const x = X(o.x), y = Y(o.y);
       if (o.t === 'tree') { g.fillStyle = '#2d6a4f'; g.beginPath(); g.arc(x, y, o.r * s * 1.3, 0, TAU); g.fill(); g.fillStyle = '#ffffff'; g.beginPath(); g.arc(x - 2, y - 2, o.r * s * 0.5, 0, TAU); g.fill(); }
@@ -337,7 +484,7 @@ export const G = {
       else { g.fillStyle = '#4cc9f0'; g.fillRect(x - o.hw * s, y - o.hd * s, o.hw * 2 * s, o.hd * 2 * s); g.fillStyle = '#fff'; g.font = `bold ${Math.round(o.hd * s * 1.6)}px system-ui`; g.textAlign = 'center'; g.fillText('▲', x, y + o.hd * s * 0.6); }
     }
     const view = { ...v, R: s, X, Y };
-    for (const e of ents) drawPlayer(g, view, { ...e, pr: PR * 1.3 }, meId, t);
+    for (const e of ents) if (!mine || rdOf(e) === rdOf(mine)) drawPlayer(g, view, { ...e, pr: PR * 1.3 }, meId, t);
   },
 };
 
@@ -389,64 +536,74 @@ function buildScene(S, W) {
   const trunkM = new THREE.MeshStandardMaterial({ color: '#7f5539' });
   const leafM = new THREE.MeshStandardMaterial({ color: '#2d6a4f', roughness: 0.8, flatShading: true });
   const capM = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.6 });
-  const trees = [...W.obs.filter((o) => o.t === 'tree').map((o) => ({ x: o.x, y: o.y, s: 1.15 })), ...W.deco];
-  const inst = (geo, mat, y) => {
-    const im = new THREE.InstancedMesh(geo, mat, trees.length);
-    const m4 = new THREE.Matrix4();
-    trees.forEach((tr, i) => { m4.makeScale(tr.s, tr.s, tr.s); m4.setPosition(tr.x, y * tr.s, tr.y); im.setMatrixAt(i, m4); });
-    im.castShadow = true;
-    scene.add(im);
+  const forest = (trees, parent) => {
+    const inst = (geo, mat, y) => {
+      const im = new THREE.InstancedMesh(geo, mat, trees.length);
+      const m4 = new THREE.Matrix4();
+      trees.forEach((tr, i) => { m4.makeScale(tr.s, tr.s, tr.s); m4.setPosition(tr.x, y * tr.s, tr.y); im.setMatrixAt(i, m4); });
+      im.castShadow = true;
+      parent.add(im);
+    };
+    inst(trunkG, trunkM, 0.045);
+    inst(leafG1, leafM, 0.16);
+    inst(leafG2, leafM, 0.26);
+    inst(capG, capM, 0.32);
   };
-  inst(trunkG, trunkM, 0.045);
-  inst(leafG1, leafM, 0.16);
-  inst(leafG2, leafM, 0.26);
-  inst(capG, capM, 0.32);
+  forest(W.deco, scene);
   // rocas, troncos y rampas
   const rockM = new THREE.MeshStandardMaterial({ color: '#6c757d', roughness: 0.9, flatShading: true });
   const logM = new THREE.MeshStandardMaterial({ color: '#8d5a3b', roughness: 0.8 });
   // rampa: lados en triángulo más oscuros para que se note hacia dónde sube
   const rampM = [new THREE.MeshStandardMaterial({ color: '#0077b6', roughness: 0.5 }), new THREE.MeshStandardMaterial({ color: '#4cc9f0', roughness: 0.4 })];
   const arrowM = new THREE.MeshBasicMaterial({ color: '#ffffff' });
-  for (const o of W.obs) {
-    if (o.t === 'rock') {
-      const m = new THREE.Mesh(new THREE.DodecahedronGeometry(o.r, 0), rockM);
-      m.scale.set(1.1, 0.75, 1);
-      m.position.set(o.x, o.r * 0.45, o.y);
-      m.rotation.y = o.rot;
-      m.castShadow = true;
-      scene.add(m);
-      const snow = new THREE.Mesh(new THREE.SphereGeometry(o.r * 0.7, 8, 6, 0, TAU, 0, Math.PI / 2), capM);
-      snow.scale.set(1.1, 0.5, 1);
-      snow.position.set(o.x, o.r * 0.85, o.y);
-      scene.add(snow);
-    } else if (o.t === 'log') {
-      const m = new THREE.Mesh(new THREE.CylinderGeometry(o.hd, o.hd, o.hw * 2, 10), logM);
-      m.rotation.z = Math.PI / 2;
-      m.position.set(o.x, o.hd, o.y);
-      m.castShadow = true;
-      scene.add(m);
-      for (const s of [-1, 1]) {
-        const end = new THREE.Mesh(new THREE.CircleGeometry(o.hd * 0.95, 10), new THREE.MeshStandardMaterial({ color: '#e9c46a' }));
-        end.rotation.y = (s * Math.PI) / 2;
-        end.position.set(o.x + s * (o.hw + 0.001), o.hd, o.y);
-        scene.add(end);
+  // cada bajada tiene su propia pista: un grupo por bajada (solo se ve la actual)
+  const courses = W.courses.map((course, rd) => {
+    const grp = new THREE.Group();
+    grp.visible = rd === 0;
+    scene.add(grp);
+    forest(course.obs.filter((o) => o.t === 'tree').map((o) => ({ x: o.x, y: o.y, s: 1.15 })), grp);
+    for (const o of course.obs) {
+      if (o.t === 'rock') {
+        const m = new THREE.Mesh(new THREE.DodecahedronGeometry(o.r, 0), rockM);
+        m.scale.set(1.1, 0.75, 1);
+        m.position.set(o.x, o.r * 0.45, o.y);
+        m.rotation.y = o.rot;
+        m.castShadow = true;
+        grp.add(m);
+        const snow = new THREE.Mesh(new THREE.SphereGeometry(o.r * 0.7, 8, 6, 0, TAU, 0, Math.PI / 2), capM);
+        snow.scale.set(1.1, 0.5, 1);
+        snow.position.set(o.x, o.r * 0.85, o.y);
+        grp.add(snow);
+      } else if (o.t === 'log') {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(o.hd, o.hd, o.hw * 2, 10), logM);
+        m.rotation.z = Math.PI / 2;
+        m.position.set(o.x, o.hd, o.y);
+        m.castShadow = true;
+        grp.add(m);
+        for (const s of [-1, 1]) {
+          const end = new THREE.Mesh(new THREE.CircleGeometry(o.hd * 0.95, 10), new THREE.MeshStandardMaterial({ color: '#e9c46a' }));
+          end.rotation.y = (s * Math.PI) / 2;
+          end.position.set(o.x + s * (o.hw + 0.001), o.hd, o.y);
+          grp.add(end);
+        }
+      } else if (o.t === 'ramp') {
+        // de perfil: sube desde arriba de la montaña hacia la meta (lo alto queda hacia abajo)
+        const sh = new THREE.Shape([new THREE.Vector2(-o.hd, 0), new THREE.Vector2(o.hd, 0), new THREE.Vector2(o.hd, 0.08)]);
+        const geo = new THREE.ExtrudeGeometry(sh, { depth: o.hw * 2, bevelEnabled: false });
+        geo.translate(0, 0, -o.hw);
+        const m = new THREE.Mesh(geo, rampM);
+        m.rotation.y = Math.PI / 2;
+        m.position.set(o.x, 0, o.y);
+        m.castShadow = true;
+        grp.add(m);
+        const ar = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.07, 3), arrowM);
+        ar.rotation.x = -Math.PI / 2 + 0.42;
+        ar.position.set(o.x, 0.05, o.y - 0.01);
+        grp.add(ar);
       }
-    } else if (o.t === 'ramp') {
-      // de perfil: sube desde arriba de la montaña hacia la meta (lo alto queda hacia abajo)
-      const sh = new THREE.Shape([new THREE.Vector2(-o.hd, 0), new THREE.Vector2(o.hd, 0), new THREE.Vector2(o.hd, 0.08)]);
-      const geo = new THREE.ExtrudeGeometry(sh, { depth: o.hw * 2, bevelEnabled: false });
-      geo.translate(0, 0, -o.hw);
-      const m = new THREE.Mesh(geo, rampM);
-      m.rotation.y = Math.PI / 2;
-      m.position.set(o.x, 0, o.y);
-      m.castShadow = true;
-      scene.add(m);
-      const ar = new THREE.Mesh(new THREE.ConeGeometry(0.035, 0.07, 3), arrowM);
-      ar.rotation.x = -Math.PI / 2 + 0.42;
-      ar.position.set(o.x, 0.05, o.y - 0.01);
-      scene.add(ar);
     }
-  }
+    return grp;
+  });
   // bordes: banderines rojos y azules
   const flags = [];
   const poleG = new THREE.CylinderGeometry(0.006, 0.006, 0.2, 5);
@@ -499,7 +656,7 @@ function buildScene(S, W) {
   line.rotation.x = -Math.PI / 2;
   line.position.set(0, 0.003, -LEN);
   scene.add(line);
-  Object.assign(S.objs, { flags, banner });
+  Object.assign(S.objs, { flags, banner, courses });
 }
 
 // Muñeco sobre una tabla de snowboard: de lado, con los pies abiertos a lo largo
@@ -580,9 +737,11 @@ export function makeRider(S, e, U) {
 // barra de avance: dónde va cada uno entre la salida y la meta
 function topBar(ext, players) {
   const all = (ext && ext.all) || [];
+  const me = all[0];
+  const rd = me ? rdOf(me) : 0;
   const dots = players.map((p, i) => {
     const e = all.find((x) => x && x.id === p.id);
-    if (!e) return '';
+    if (!e || rdOf(e) !== rd) return '';
     const k = Math.max(0, Math.min(1, -e.y / LEN));
     return `<i style="left:${Math.round(k * 100)}%;background:${p.c || COLORS[i]};${e.out ? 'opacity:.35' : ''}"></i>`;
   }).join('');
@@ -593,15 +752,28 @@ export default {
   id: 'snow',
   name: 'Bajada nevada',
   realtime: true,
-  desc: '¡Baja la montaña en snowboard! Muévete de lado a lado (arriba acelera, abajo frena) y usa SALTA para pasar sobre rocas y troncos. Los árboles hay que esquivarlos; las rampas te mandan a volar. Si chocas quedas fuera. Gana quien llegue primero a la meta o el último en pie.',
+  desc: '¡3 bajadas en snowboard! Muévete de lado a lado (arriba acelera, abajo frena) y usa SALTA para pasar sobre rocas y troncos. Los árboles hay que esquivarlos; las rampas te mandan a volar. Si chocas quedas fuera de esa bajada. En cada bajada sumas un punto por cada rival al que le ganes; tras 3 bajadas gana quien sume más.',
   dur: () => TOTAL * 1000,
-  mount: (el, ctx) => { ME = ctx.me; SPEC.on = false; return mountRT(el, ctx, { ...G, topText: (t, W, ext) => topBar(ext, ctx.players || []) }); },
+  mount: (el, ctx) => { ME = ctx.me; SPEC.on = false; return mountRT(el, ctx, { ...G, topText: (t, W, ext) => G.board(t, ext) ?? topBar(ext, ctx.players || []) }); },
+  // puntúa con el marcador del árbitro (puntos de las 3 bajadas); desempate: cómo le fue en cada una
+  evaluateAll(vals, seed, pl) {
+    const hs = FINAL.get(seed);
+    const out = {};
+    for (const p of pl) {
+      const v = vals[p.id];
+      if (!hs) { out[p.id] = this.evaluate(v); continue; }
+      const pts = hs.pts[p.id] || 0, tb = hs.tb[p.id] || 0;
+      if (!v && !pts && !tb) { out[p.id] = null; continue; }
+      out[p.id] = { score: pts * 1e5 + tb, label: `${hs.done === p.id ? '{trophy} ' : ''}${pts} pt${pts === 1 ? '' : 's'}` };
+    }
+    return out;
+  },
   evaluate(v) {
     if (!v || typeof v.d !== 'number') return null;
+    const pts = Math.max(0, Math.min(ROUNDS * 3, v.pts | 0));
     const d = Math.max(0, Math.min(LEN + 3, v.d));
-    if (typeof v.fin === 'number' && v.fin > 3 && v.fin <= TOTAL) return { score: 2e6 - Math.round(v.fin * 1000), label: `{flag} meta en ${v.fin.toFixed(1)} s` };
-    if (!v.out) return { score: 1e6 + Math.round(d * 1000), label: `{trophy} en pie · ${Math.round(d * M)} m` };
-    return { score: Math.round(d * 1000), label: `chocó a los ${Math.round(d * M)} m` };
+    const tb = typeof v.fin === 'number' ? 1000 + Math.max(0, RMAX + 5 - v.fin) * 10 : (v.out ? 0 : 200) + d;
+    return { score: pts * 1e5 + tb, label: `${pts} pt${pts === 1 ? '' : 's'}` };
   },
   bot: (r, seed, p) => simulateBot(G, seed, Number(String(p?.id || 'bot0').slice(3)) || 0),
 };

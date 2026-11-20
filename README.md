@@ -18,14 +18,14 @@ compiten ronda tras ronda por estrellas ⭐.
 | ⏱️ | Para en… *(3D)* | 3 rondas: detén el cronómetro gigante en el segundo pedido (1–10) |
 | 🎈 | Gallina *(3D)* | 3 rondas: un globo se infla y su premio sube; plántate antes de que explote. El último en plantarse gana el doble. Si ya todos se plantaron, el globo se acelera |
 | ⚖️ | Equilibrio *(3D, física)* | Una grúa pasa con la pieza siguiente: suéltala y gírala para armar la torre más alta en 40 s. Física real: si queda descentrada, se cae. Todos reciben las mismas piezas y se ven las alturas de los demás en vivo |
-| 🔍 | ¿Dónde está? *(3D)* | 5 rondas: encuentra el juguete pedido ("el patito amarillo") en una mesa llena de trampas; tocar uno equivocado bloquea 1 s y en las últimas rondas la mesa gira. Gana el que menos tiempo sume |
+| 🔍 | ¿Dónde está? *(3D)* | 5 rondas: encuentra el juguete pedido ("el patito amarillo") en una mesa redonda (se ve completa) con 24 a 64 juguetes y muchas trampas, incluso colores parecidos (rosado/rojo, celeste/azul). 10 s por ronda, tocar uno equivocado bloquea 1,5 s, solo hay pista en las 3 primeras y desde la 3.ª la mesa gira. Gana el que menos tiempo sume |
 | 🐙 | Kraken en cubierta *(tiempo real)* | Saltar los tentáculos que giran en el barco; sobrevivir más |
 | 💣 | Lluvia de bombas *(tiempo real)* | Esquivar bombas, cajas que caen y barriles que ruedan (se saltan); 3 vidas |
 | 🟩 | Pisa el color *(tiempo real)* | Pararse en el color anunciado antes de que el piso se caiga |
 | 🪙 | Fiebre de monedas *(tiempo real)* | Recoger más monedas en 30 s |
 | 🌀 | Trompos de batalla *(tiempo real)* | Por rondas: embiste a los demás para sacarlos del estadio; la ronda la gana el último en pie y el primero en ganar 3 rondas gana |
 | 💥 | Bomba caliente *(tiempo real)* | Pasar la bomba antes de que explote; gana el último en pie |
-| 🏂 | Bajada nevada *(3D, tiempo real)* | Bajar la montaña en snowboard: esquiva árboles, salta rocas y troncos, usa las rampas. Quien choca queda fuera; termina cuando queda uno o todos los que siguen en pie llegan a la meta |
+| 🏂 | Bajada nevada *(3D, tiempo real)* | 3 bajadas en snowboard, cada una con su propia pista: esquiva árboles, salta rocas y troncos, usa las rampas. Quien choca queda fuera de esa bajada; cada una termina cuando queda uno, cuando todos los que siguen en pie llegan a la meta o a los 30 s. Cada bajada da 1 punto por cada rival al que le ganaste; tras 3 gana quien sume más |
 | 🎨 | Pinta el piso *(tiempo real)* | Cada casilla que pisas queda de tu color (y repintas la de los demás). Bombas de pintura que salpican alrededor y CORRE para embestir y marear. A los 45 s gana quien tenga más piso |
 | 🧊 | Hielo frágil *(tiempo real)* | El hielo que pisas se hunde; gana el último en pie |
 

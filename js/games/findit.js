@@ -1,8 +1,9 @@
 // 🔍 ¿Dónde está? — 5 rondas (3D). Se muestra un juguete (por ejemplo, "el
 // patito amarillo") y luego una mesa llena de juguetes: hay patitos de otros
 // colores y otras cosas amarillas para confundir. Tócalo lo más rápido posible;
-// si tocas uno equivocado quedas bloqueado un segundo. Cada ronda trae más
-// juguetes y en las últimas la mesa gira. Gana el que menos tiempo sume.
+// si tocas uno equivocado quedas bloqueado 1,5 s. Cada ronda trae más
+// juguetes (de 24 a 64), hay colores parecidos (rosado/rojo, celeste/azul) y
+// desde la ronda 3 la mesa gira. Gana el que menos tiempo sume.
 //
 // La mesa sale de la semilla (todos ven la misma). Cada jugador envía cuánto
 // tardó en cada ronda y se ve en vivo quién ya lo encontró.
@@ -13,23 +14,29 @@ import { USE_2D } from '../rt.js';
 
 const ROUNDS = 5;
 const INTRO = 2400;    // se muestra qué hay que buscar
-const FIND = 12000;    // tiempo para encontrarlo
+const FIND = 10000;    // tiempo para encontrarlo
 const REVEAL = 2600;   // se muestra dónde estaba
 const MISS = FIND + 3000; // tiempo que cuenta si no lo encontraste
-const LOCK = 1000;     // castigo por tocar uno equivocado
-const COUNTS = [16, 24, 32, 40, 48];
+const LOCK = 1500;     // castigo por tocar uno equivocado
+const COUNTS = [24, 34, 44, 54, 64];
+const SPIN = [0, 0, 0.2, 0.3, 0.42];   // vueltas de la mesa (rad/s) en cada ronda
+const HINT_ROUNDS = 3;  // solo hay pista en las primeras rondas
+export const TR = 1.42; // radio de la mesa (redonda)
+const AREA = TR - 0.2;  // radio donde caen los juguetes
 const hash = (s) => { let h = 2166136261; for (const ch of String(s)) h = Math.imul(h ^ ch.charCodeAt(0), 16777619); return h >>> 0; };
 
 export const KINDS = {
   duck: { n: 'patito', f: 0 },
   ball: { n: 'pelota', f: 1 },
-  cube: { n: 'cubo', f: 0 },
+  cube: { n: 'bloque', f: 0 },
   star: { n: 'estrella', f: 1 },
   car: { n: 'carrito', f: 0 },
   cone: { n: 'cono', f: 0 },
   donut: { n: 'dona', f: 1 },
   heart: { n: 'corazón', f: 0 },
   mush: { n: 'hongo', f: 0 },
+  bear: { n: 'osito', f: 0 },
+  rocket: { n: 'cohete', f: 0 },
 };
 export const COLS = [
   { c: '#ef233c', m: 'rojo', f: 'roja' },
@@ -38,7 +45,11 @@ export const COLS = [
   { c: '#06d6a0', m: 'verde', f: 'verde' },
   { c: '#9d4edd', m: 'morado', f: 'morada' },
   { c: '#fb8500', m: 'naranja', f: 'naranja' },
+  { c: '#ff70a6', m: 'rosado', f: 'rosada' },
+  { c: '#4cc9f0', m: 'celeste', f: 'celeste' },
 ];
+// colores que se confunden fácil (para las trampas)
+const NEAR = [[6, 5], [7, 4], [5], [7], [1, 6], [0, 2], [0, 4], [1, 3]];
 const KIND_IDS = Object.keys(KINDS);
 export const nameOf = (kind, col) => { const k = KINDS[kind], c = COLS[col]; return `${k.f ? 'la' : 'el'} ${k.n} ${k.f ? c.f : c.m}`; };
 
@@ -55,40 +66,47 @@ function plan(seed) {
     const tc = Math.floor(r() * COLS.length);
     const n = COUNTS[k];
     const items = [{ kind: tk, col: tc }];
-    // trampas: el mismo juguete de otro color y otros juguetes del mismo color
-    const sameKind = Math.round(n * 0.22), sameCol = Math.round(n * 0.22);
-    for (let i = 0; i < sameKind; i++) { let c; do { c = Math.floor(r() * COLS.length); } while (c === tc); items.push({ kind: tk, col: c }); }
+    // trampas: el mismo juguete de otro color (sobre todo de un color parecido)
+    // y otros juguetes del mismo color
+    const sameKind = Math.round(n * 0.26), sameCol = Math.round(n * 0.24);
+    for (let i = 0; i < sameKind; i++) {
+      let c;
+      if (r() < 0.5) c = NEAR[tc][Math.floor(r() * NEAR[tc].length)];
+      else do { c = Math.floor(r() * COLS.length); } while (c === tc);
+      items.push({ kind: tk, col: c });
+    }
     for (let i = 0; i < sameCol; i++) { let kd; do { kd = KIND_IDS[Math.floor(r() * KIND_IDS.length)]; } while (kd === tk); items.push({ kind: kd, col: tc }); }
     while (items.length < n) {
       const kd = KIND_IDS[Math.floor(r() * KIND_IDS.length)], c = Math.floor(r() * COLS.length);
       if (kd === tk && c === tc) continue;
       items.push({ kind: kd, col: c });
     }
-    // posiciones sin encimarse mucho
-    const minD = Math.sqrt((2.0 * 2.4) / n) * 0.72;
+    // posiciones dentro de la mesa redonda, sin encimarse mucho
+    const minD = Math.sqrt((Math.PI * AREA * AREA) / n) * 0.78;
     const pos = [];
     for (const it of items) {
       let x = 0, z = 0;
-      for (let tries = 0; tries < 60; tries++) {
-        x = (r() * 2 - 1) * 0.95; z = (r() * 2 - 1) * 1.15;
-        if (pos.every(([a, b]) => Math.hypot(a - x, b - z) > minD)) break;
+      for (let tries = 0; tries < 80; tries++) {
+        const a = r() * Math.PI * 2, d = Math.sqrt(r()) * AREA;
+        x = Math.cos(a) * d; z = Math.sin(a) * d;
+        if (pos.every(([a2, b2]) => Math.hypot(a2 - x, b2 - z) > minD)) break;
       }
       pos.push([x, z]);
-      Object.assign(it, { x, z, rot: r() * Math.PI * 2, s: 0.9 + r() * 0.25 });
+      Object.assign(it, { x, z, rot: r() * Math.PI * 2, s: 0.9 + r() * 0.2 });
     }
     // el buscado no va siempre primero en la lista
     for (let i = items.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [items[i], items[j]] = [items[j], items[i]]; }
     const target = items.findIndex((it) => it.kind === tk && it.col === tc);
     const run = t + INTRO;
-    out.push({ start: t, run, end: run + FIND + REVEAL, items, target, spin: k >= 3 ? (k === 3 ? 0.22 : 0.34) * (r() < 0.5 ? -1 : 1) : 0 });
+    out.push({ start: t, run, end: run + FIND + REVEAL, items, target, size: Math.min(1.55, 7.6 / Math.sqrt(n)), spin: SPIN[k] * (r() < 0.5 ? -1 : 1) });
     t = run + FIND + REVEAL;
   }
   return out;
 }
 function botMs(seed, id, k) {
   const r = mulberry32((seed ^ hash(id) ^ Math.imul(k + 5, 0x27d4eb2d)) >>> 0);
-  if (r() < 0.12) return null;
-  return Math.round(Math.min(FIND - 200, 1300 + Math.pow(r(), 1.4) * 7000 + k * 450));
+  if (r() < 0.15 + k * 0.03) return null;
+  return Math.round(Math.min(FIND - 200, 1500 + Math.pow(r(), 1.3) * 6500 + k * 500));
 }
 const valid = (ms) => typeof ms === 'number' && isFinite(ms) && ms >= 0 && ms < FIND;
 const totalOf = (arr) => Array.from({ length: ROUNDS }, (_, k) => (valid(arr && arr[k]) ? arr[k] : MISS)).reduce((a, b) => a + b, 0);
@@ -97,7 +115,7 @@ export default {
   id: 'findit',
   name: '¿Dónde está?',
   uses3d: true,
-  desc: 'Se muestra un juguete (por ejemplo, el patito amarillo) y luego una mesa llena de juguetes. ¡Tócalo lo más rápido que puedas! Ojo con las trampas: si tocas uno equivocado quedas bloqueado un segundo. 5 rondas; gana el que menos tiempo sume.',
+  desc: 'Se muestra un juguete (por ejemplo, el patito amarillo) y luego una mesa llena de juguetes. ¡Tócalo lo más rápido que puedas! Ojo con las trampas: si tocas uno equivocado quedas bloqueado. Cada ronda hay más juguetes, colores parecidos y desde la 3.ª la mesa gira. 5 rondas; gana el que menos tiempo sume.',
   dur: (seed) => plan(seed)[ROUNDS - 1].end,
 
   mount(el, ctx) {
@@ -248,7 +266,7 @@ function run(el, ctx, use3d) {
         sfx.pass(0.5);
         if (my[k] === null) showMsg(`${esc(p.n)} ya lo encontró`, 1000);
       }
-      if (el2 >= FIND - 4000 && my[k] === null && !R._hint) { R._hint = 1; if (view) view.hint(R.target, ctx.seed + k * 977); showMsg('{sparkle} Pista: está por aquí', 1400); }
+      if (k < HINT_ROUNDS && el2 >= FIND - 3000 && my[k] === null && !R._hint) { R._hint = 1; if (view) view.hint(R.target, ctx.seed + k * 977); showMsg('{sparkle} Pista: está por aquí', 1400); }
       if (FIND - el2 < 3000 && my[k] === null && Math.floor(el2 / 1000) !== R._tk) { R._tk = Math.floor(el2 / 1000); sfx.tick(1.2); }
       // ¿ya lo encontraron todos? saltar a la respuesta
       if (players.every((p) => { const ms = msOf(p, k, live); return valid(ms) && ms <= el2; })) {
@@ -295,84 +313,227 @@ function run(el, ctx, use3d) {
 }
 
 // ---------------------------------------------------------------- 3D
+// Juguetes de plástico brillante: cada uno se arma con piezas simples.
 function makeToy(THREE, kind, color) {
   const g = new THREE.Group();
-  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.4 });
-  const dark = new THREE.MeshStandardMaterial({ color: '#2b2d42', roughness: 0.5 });
-  const white = new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.5 });
-  const add = (geo, m, x = 0, y = 0, z = 0) => { const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = true; g.add(me); return me; };
+  const plastic = (c, extra = {}) => new THREE.MeshPhysicalMaterial({ color: c, roughness: 0.32, clearcoat: 0.7, clearcoatRoughness: 0.2, ...extra });
+  const mat = plastic(color);
+  const dark = plastic('#1b1035', { roughness: 0.4 });
+  const white = plastic('#ffffff');
+  const light = plastic(new THREE.Color(color).lerp(new THREE.Color('#ffffff'), 0.55));
+  const glass = plastic('#caf0f8', { roughness: 0.1, metalness: 0.1 });
+  const add = (geo, m, x = 0, y = 0, z = 0, parent = g) => { const me = new THREE.Mesh(geo, m); me.position.set(x, y, z); me.castShadow = true; parent.add(me); return me; };
+  const eyes = (x, y, z, gap, r, parent = g) => {
+    for (const s of [-1, 1]) {
+      add(new THREE.SphereGeometry(r, 10, 8), white, x, y, z + s * gap, parent);
+      add(new THREE.SphereGeometry(r * 0.55, 8, 6), dark, x + r * 0.55, y + r * 0.1, z + s * gap, parent);
+    }
+  };
   const R = 0.1;
   if (kind === 'duck') {
-    add(new THREE.SphereGeometry(R, 16, 12), mat, 0, R * 0.9, 0).scale.set(1.15, 0.85, 1);
-    add(new THREE.SphereGeometry(R * 0.6, 14, 10), mat, R * 0.65, R * 1.75, 0);
-    add(new THREE.ConeGeometry(R * 0.25, R * 0.5, 8), new THREE.MeshStandardMaterial({ color: '#fb8500' }), R * 1.25, R * 1.7, 0).rotation.z = -Math.PI / 2;
-    add(new THREE.SphereGeometry(R * 0.1, 6, 6), dark, R * 0.95, R * 1.95, R * 0.3);
-    add(new THREE.SphereGeometry(R * 0.1, 6, 6), dark, R * 0.95, R * 1.95, -R * 0.3);
+    add(new THREE.SphereGeometry(R, 20, 14), mat, 0, R * 0.85, 0).scale.set(1.25, 0.85, 1);
+    add(new THREE.ConeGeometry(R * 0.35, R * 0.6, 10), mat, -R * 1.15, R * 1.2, 0).rotation.z = 0.9;   // colita
+    for (const s of [-1, 1]) add(new THREE.SphereGeometry(R * 0.45, 12, 8), mat, -R * 0.1, R * 0.95, s * R * 0.82).scale.set(1.4, 0.55, 0.45); // alas
+    add(new THREE.SphereGeometry(R * 0.62, 18, 12), mat, R * 0.7, R * 1.8, 0);
+    const beak = add(new THREE.SphereGeometry(R * 0.3, 12, 8), plastic('#fb8500'), R * 1.3, R * 1.68, 0);
+    beak.scale.set(1.3, 0.45, 0.9);
+    eyes(R * 1.05, R * 2.0, 0, R * 0.3, R * 0.14);
   } else if (kind === 'ball') {
-    add(new THREE.SphereGeometry(R * 1.05, 18, 14), mat, 0, R * 1.05, 0);
-    add(new THREE.TorusGeometry(R * 1.06, R * 0.12, 6, 24), white, 0, R * 1.05, 0).rotation.x = Math.PI / 2;
+    add(new THREE.SphereGeometry(R * 1.05, 24, 16), mat, 0, R * 1.05, 0);
+    add(new THREE.TorusGeometry(R * 1.055, R * 0.11, 8, 32), white, 0, R * 1.05, 0).rotation.x = Math.PI / 2;
+    add(new THREE.TorusGeometry(R * 1.055, R * 0.11, 8, 32), white, 0, R * 1.05, 0);
+    add(new THREE.SphereGeometry(R * 0.25, 10, 8), white, 0, R * 2.07, 0).scale.set(1, 0.3, 1);
   } else if (kind === 'cube') {
-    add(new THREE.BoxGeometry(R * 1.7, R * 1.7, R * 1.7), mat, 0, R * 0.85, 0);
+    // bloque de construcción con 4 botones arriba
+    const sh = new THREE.Shape();
+    const h = R * 0.85, rr = R * 0.25;
+    sh.moveTo(-h + rr, -h); sh.lineTo(h - rr, -h); sh.quadraticCurveTo(h, -h, h, -h + rr); sh.lineTo(h, h - rr); sh.quadraticCurveTo(h, h, h - rr, h);
+    sh.lineTo(-h + rr, h); sh.quadraticCurveTo(-h, h, -h, h - rr); sh.lineTo(-h, -h + rr); sh.quadraticCurveTo(-h, -h, -h + rr, -h);
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: R * 1.1, bevelEnabled: true, bevelThickness: R * 0.12, bevelSize: R * 0.1, bevelSegments: 3 });
+    geo.center();
+    add(geo, mat, 0, R * 0.75, 0).rotation.x = -Math.PI / 2;
+    for (const [x, z] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) add(new THREE.CylinderGeometry(R * 0.26, R * 0.26, R * 0.22, 16), mat, x * R * 0.45, R * 1.45, z * R * 0.45);
   } else if (kind === 'star' || kind === 'heart') {
     const sh = new THREE.Shape();
     if (kind === 'star') {
-      for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? R * 0.55 : R * 1.3; const x = Math.cos(a) * rr, y = Math.sin(a) * rr; if (i) sh.lineTo(x, y); else sh.moveTo(x, y); }
+      for (let i = 0; i < 10; i++) { const a = Math.PI / 2 + (i * Math.PI) / 5, rr = i % 2 ? R * 0.6 : R * 1.3; const x = Math.cos(a) * rr, y = Math.sin(a) * rr; if (i) sh.lineTo(x, y); else sh.moveTo(x, y); }
     } else {
       const s = R * 0.13;
       sh.moveTo(0, -7 * s); sh.bezierCurveTo(-11 * s, 0, -6 * s, 8 * s, 0, 4 * s); sh.bezierCurveTo(6 * s, 8 * s, 11 * s, 0, 0, -7 * s);
     }
-    const geo = new THREE.ExtrudeGeometry(sh, { depth: R * 0.5, bevelEnabled: true, bevelThickness: R * 0.1, bevelSize: R * 0.08, bevelSegments: 2 });
+    const geo = new THREE.ExtrudeGeometry(sh, { depth: R * 0.45, bevelEnabled: true, bevelThickness: R * 0.18, bevelSize: R * 0.14, bevelSegments: 4 });
     geo.center();
-    const m = add(geo, mat, 0, R * 0.35, 0);
+    const m = add(geo, mat, 0, R * 0.42, 0);
     m.rotation.x = -Math.PI / 2;
+    // carita
+    const face = new THREE.Group();
+    face.position.set(0, R * 0.8, kind === 'star' ? R * 0.05 : R * 0.1);
+    g.add(face);
+    for (const s of [-1, 1]) {
+      add(new THREE.SphereGeometry(R * 0.13, 10, 8), dark, s * R * 0.25, 0, 0, face).scale.set(1, 0.5, 1.2);
+      add(new THREE.SphereGeometry(R * 0.04, 6, 6), white, s * R * 0.25 + R * 0.03, R * 0.05, -R * 0.04, face);
+      add(new THREE.SphereGeometry(R * 0.1, 8, 6), plastic('#ff8fab'), s * R * 0.5, -R * 0.02, R * 0.2, face).scale.set(1, 0.3, 0.7);
+    }
   } else if (kind === 'car') {
-    add(new THREE.BoxGeometry(R * 2.2, R * 0.7, R * 1.2), mat, 0, R * 0.6, 0);
-    add(new THREE.BoxGeometry(R * 1.1, R * 0.6, R * 1.0), mat, -R * 0.15, R * 1.2, 0);
-    for (const [x, z] of [[0.7, 0.6], [-0.7, 0.6], [0.7, -0.6], [-0.7, -0.6]]) add(new THREE.CylinderGeometry(R * 0.33, R * 0.33, R * 0.25, 12), dark, x * R, R * 0.33, z * R).rotation.x = Math.PI / 2;
+    const body = add(new THREE.BoxGeometry(R * 2.3, R * 0.65, R * 1.25), mat, 0, R * 0.62, 0);
+    body.geometry = new THREE.CapsuleGeometry(R * 0.32, R * 1.6, 6, 12);
+    body.rotation.z = Math.PI / 2;
+    body.scale.set(1, 1, 1.9);
+    add(new THREE.SphereGeometry(R * 0.62, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), mat, -R * 0.15, R * 0.85, 0).scale.set(1.35, 1, 0.95);
+    add(new THREE.SphereGeometry(R * 0.58, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), glass, -R * 0.15, R * 0.9, 0).scale.set(1.3, 0.95, 0.88);
+    const metal = new THREE.MeshStandardMaterial({ color: '#dee2e6', metalness: 0.8, roughness: 0.25 });
+    for (const [x, z] of [[0.75, 0.62], [-0.75, 0.62], [0.75, -0.62], [-0.75, -0.62]]) {
+      add(new THREE.CylinderGeometry(R * 0.34, R * 0.34, R * 0.26, 16), dark, x * R, R * 0.34, z * R).rotation.x = Math.PI / 2;
+      add(new THREE.CylinderGeometry(R * 0.16, R * 0.16, R * 0.28, 12), metal, x * R, R * 0.34, z * R).rotation.x = Math.PI / 2;
+    }
+    for (const s of [-1, 1]) add(new THREE.SphereGeometry(R * 0.1, 8, 6), plastic('#fff3b0', { emissive: '#ffd60a', emissiveIntensity: 0.4 }), R * 1.12, R * 0.68, s * R * 0.35);
   } else if (kind === 'cone') {
-    add(new THREE.ConeGeometry(R * 0.75, R * 2.2, 16), mat, 0, R * 1.1, 0);
-    add(new THREE.CylinderGeometry(R * 0.5, R * 0.6, R * 0.3, 16), white, 0, R * 0.75, 0);
-    add(new THREE.BoxGeometry(R * 1.7, R * 0.15, R * 1.7), mat, 0, R * 0.08, 0);
+    add(new THREE.BoxGeometry(R * 1.7, R * 0.16, R * 1.7), mat, 0, R * 0.08, 0);
+    add(new THREE.ConeGeometry(R * 0.72, R * 2.1, 24), mat, 0, R * 1.2, 0);
+    add(new THREE.CylinderGeometry(R * 0.5, R * 0.6, R * 0.32, 24), white, 0, R * 0.95, 0);
+    add(new THREE.CylinderGeometry(R * 0.29, R * 0.38, R * 0.26, 24), white, 0, R * 1.55, 0);
   } else if (kind === 'donut') {
-    const m = add(new THREE.TorusGeometry(R * 0.8, R * 0.4, 12, 24), mat, 0, R * 0.4, 0);
-    m.rotation.x = Math.PI / 2;
+    const dough = add(new THREE.TorusGeometry(R * 0.8, R * 0.42, 16, 32), plastic('#e9b872', { clearcoat: 0.2, roughness: 0.6 }), 0, R * 0.42, 0);
+    dough.rotation.x = Math.PI / 2;
+    dough.scale.z = 0.85;
+    const icing = add(new THREE.TorusGeometry(R * 0.8, R * 0.4, 16, 32, Math.PI * 2), mat, 0, R * 0.55, 0);
+    icing.rotation.x = Math.PI / 2;
+    icing.scale.set(1.02, 1.02, 0.6);
+    const spr = ['#ffffff', '#ffd60a', '#4cc9f0', '#ff70a6', '#06d6a0'].map((c) => plastic(c));
+    for (let i = 0; i < 14; i++) {
+      const a = (i / 14) * Math.PI * 2 + (i % 3) * 0.2, d = R * (0.62 + (i % 4) * 0.12);
+      const sp = add(new THREE.CapsuleGeometry(R * 0.04, R * 0.14, 2, 6), spr[i % spr.length], Math.cos(a) * d, R * 0.82, Math.sin(a) * d);
+      sp.rotation.set(Math.PI / 2, 0, a * 3);
+    }
   } else if (kind === 'mush') {
-    add(new THREE.CylinderGeometry(R * 0.4, R * 0.5, R * 0.9, 12), white, 0, R * 0.45, 0);
-    add(new THREE.SphereGeometry(R * 1.05, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2), mat, 0, R * 0.85, 0);
-    for (const [x, z] of [[0.4, 0.3], [-0.3, 0.5], [0, -0.5]]) add(new THREE.SphereGeometry(R * 0.16, 6, 6), white, x * R, R * 1.6, z * R);
+    add(new THREE.CylinderGeometry(R * 0.38, R * 0.5, R * 0.95, 16), plastic('#fff1e6'), 0, R * 0.48, 0);
+    const cap = add(new THREE.SphereGeometry(R * 1.05, 24, 14, 0, Math.PI * 2, 0, Math.PI / 2), mat, 0, R * 0.85, 0);
+    cap.scale.y = 0.85;
+    for (const [x, z, y, rr] of [[0.45, 0.3, 1.5, 0.2], [-0.4, 0.45, 1.45, 0.17], [0.05, -0.55, 1.45, 0.19], [-0.15, 0, 1.72, 0.14], [0.6, -0.35, 1.25, 0.12], [-0.7, -0.2, 1.25, 0.13]]) {
+      add(new THREE.SphereGeometry(R * rr, 10, 8), white, x * R, y * R, z * R).scale.y = 0.45;
+    }
+  } else if (kind === 'bear') {
+    add(new THREE.SphereGeometry(R * 0.78, 18, 14), mat, 0, R * 0.72, 0).scale.set(1, 0.95, 0.9);
+    add(new THREE.SphereGeometry(R * 0.45, 12, 10), light, R * 0.32, R * 0.7, 0).scale.set(0.6, 1, 1.1);   // panza
+    add(new THREE.SphereGeometry(R * 0.6, 18, 14), mat, R * 0.1, R * 1.65, 0);
+    for (const s of [-1, 1]) {
+      add(new THREE.SphereGeometry(R * 0.22, 12, 10), mat, 0, R * 2.15, s * R * 0.42);
+      add(new THREE.SphereGeometry(R * 0.12, 10, 8), light, R * 0.06, R * 2.15, s * R * 0.42);
+      add(new THREE.SphereGeometry(R * 0.24, 12, 10), mat, R * 0.25, R * 0.25, s * R * 0.42);   // patitas
+      add(new THREE.SphereGeometry(R * 0.2, 12, 10), mat, R * 0.1, R * 0.95, s * R * 0.75);    // bracitos
+    }
+    add(new THREE.SphereGeometry(R * 0.26, 12, 10), light, R * 0.58, R * 1.58, 0).scale.set(0.7, 0.8, 1);   // hocico
+    add(new THREE.SphereGeometry(R * 0.08, 8, 6), dark, R * 0.76, R * 1.66, 0);
+    for (const s of [-1, 1]) add(new THREE.SphereGeometry(R * 0.07, 8, 6), dark, R * 0.6, R * 1.82, s * R * 0.2);
+  } else if (kind === 'rocket') {
+    // acostado, para que se vea desde arriba
+    const rk = new THREE.Group();
+    rk.rotation.z = -Math.PI / 2;
+    rk.position.y = R * 0.5;
+    g.add(rk);
+    add(new THREE.CylinderGeometry(R * 0.45, R * 0.4, R * 1.4, 20), white, 0, 0, 0, rk);
+    add(new THREE.ConeGeometry(R * 0.45, R * 0.8, 20), mat, 0, R * 1.1, 0, rk);
+    add(new THREE.CylinderGeometry(R * 0.42, R * 0.3, R * 0.25, 20), mat, 0, -R * 0.82, 0, rk);
+    add(new THREE.CylinderGeometry(R * 0.2, R * 0.2, R * 0.06, 16), glass, 0, R * 0.25, R * 0.43, rk).rotation.x = Math.PI / 2;
+    add(new THREE.TorusGeometry(R * 0.2, R * 0.05, 6, 16), mat, 0, R * 0.25, R * 0.44, rk);
+    for (let i = 0; i < 3; i++) {
+      const a = (i / 3) * Math.PI * 2 + Math.PI / 2;
+      const fin = add(new THREE.BoxGeometry(R * 0.08, R * 0.55, R * 0.45), mat, Math.cos(a) * R * 0.5, -R * 0.55, Math.sin(a) * R * 0.5, rk);
+      fin.rotation.y = -a;
+    }
+    add(new THREE.ConeGeometry(R * 0.25, R * 0.4, 12), plastic('#ffd60a', { emissive: '#fb8500', emissiveIntensity: 0.6 }), 0, -R * 1.1, 0, rk).rotation.x = Math.PI;
   }
   return g;
 }
 
+// Textura de la mesa: tablones de madera con vetas, vista desde arriba.
+function woodTexture(THREE) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  const g = c.getContext('2d');
+  const tones = ['#b5794a', '#a86b3d', '#bb8152', '#a5683a', '#b07446', '#ad7143'];
+  const pw = 512 / 6;
+  for (let i = 0; i < 6; i++) {
+    g.fillStyle = tones[i]; g.fillRect(i * pw, 0, pw, 512);
+    for (let j = 0; j < 14; j++) {
+      g.strokeStyle = `rgba(110,60,25,${0.07 + Math.random() * 0.1})`;
+      g.lineWidth = 1 + Math.random() * 2.5;
+      const x = i * pw + Math.random() * pw;
+      g.beginPath(); g.moveTo(x, 0); g.bezierCurveTo(x + 8, 170, x - 8, 340, x + 4, 512); g.stroke();
+    }
+    // nudo
+    if (i % 2 === 0) { const y = 80 + Math.random() * 350, x = i * pw + pw / 2; g.strokeStyle = 'rgba(110,60,25,0.25)'; g.lineWidth = 2; for (let k = 1; k < 4; k++) { g.beginPath(); g.ellipse(x, y, k * 4, k * 9, 0, 0, Math.PI * 2); g.stroke(); } }
+    g.fillStyle = 'rgba(70,35,10,0.45)'; g.fillRect(i * pw - 1, 0, 2.5, 512);
+  }
+  // brillo suave en el centro y bordes más oscuros
+  const gr = g.createRadialGradient(256, 230, 40, 256, 256, 300);
+  gr.addColorStop(0, 'rgba(255,240,215,0.18)'); gr.addColorStop(0.7, 'rgba(255,240,215,0)'); gr.addColorStop(1, 'rgba(60,25,5,0.3)');
+  g.fillStyle = gr; g.fillRect(0, 0, 512, 512);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  t.anisotropy = 4;
+  return t;
+}
+
 function build3D(m, stage) {
   const { THREE, miniStage } = m;
-  const S = miniStage(stage, { skyTop: '#3c096c', skyBottom: '#7b2cbf', hemiGround: '#5a189a', fov: 38 });
+  const S = miniStage(stage, { skyTop: '#240046', skyBottom: '#7b2cbf', hemiSky: '#fff4e6', hemiGround: '#5a189a', hemi: 0.9, sun: 2.1, fov: 36 });
   const { scene, camera, particles } = S;
-  // mesa de madera
-  const wood = (() => {
-    const c = document.createElement('canvas');
-    c.width = c.height = 256;
-    const g = c.getContext('2d');
-    g.fillStyle = '#c68b59'; g.fillRect(0, 0, 256, 256);
-    for (let i = 0; i < 40; i++) { g.strokeStyle = `rgba(90,50,20,${0.08 + Math.random() * 0.1})`; g.lineWidth = 1 + Math.random() * 3; g.beginPath(); const y = Math.random() * 256; g.moveTo(0, y); g.bezierCurveTo(80, y + 10, 170, y - 10, 256, y + 4); g.stroke(); }
-    const t = new THREE.CanvasTexture(c);
-    t.colorSpace = THREE.SRGBColorSpace;
-    return t;
-  })();
+  // luz cálida de lámpara sobre la mesa
+  const lamp = new THREE.PointLight('#ffe8c2', 0.7, 6, 1.5);
+  lamp.position.set(0, 2.2, 0.3);
+  scene.add(lamp);
+  // la mesa (gira en las últimas rondas) con borde y sombra en el piso
   const board = new THREE.Group();
   scene.add(board);
-  const table = new THREE.Mesh(new THREE.CylinderGeometry(1.75, 1.75, 0.12, 64), new THREE.MeshStandardMaterial({ map: wood, roughness: 0.7 }));
-  table.position.y = -0.06;
-  table.receiveShadow = true;
-  board.add(table);
+  const top = new THREE.Mesh(new THREE.CylinderGeometry(TR, TR, 0.1, 72), [
+    new THREE.MeshStandardMaterial({ color: '#8d5524', roughness: 0.6 }),
+    new THREE.MeshStandardMaterial({ map: woodTexture(THREE), roughness: 0.55 }),
+    new THREE.MeshStandardMaterial({ color: '#8d5524' }),
+  ]);
+  top.position.y = -0.05;
+  top.receiveShadow = true;
+  board.add(top);
+  const rim = new THREE.Mesh(new THREE.TorusGeometry(TR, 0.045, 12, 96), new THREE.MeshStandardMaterial({ color: '#7f4f24', roughness: 0.35, metalness: 0.1 }));
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 0.0;
+  board.add(rim);
+  // aro dorado decorativo
+  const inlay = new THREE.Mesh(new THREE.RingGeometry(TR - 0.1, TR - 0.08, 96), new THREE.MeshStandardMaterial({ color: '#ffd166', metalness: 0.6, roughness: 0.3 }));
+  inlay.rotation.x = -Math.PI / 2;
+  inlay.position.y = 0.002;
+  board.add(inlay);
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(TR * 1.12, 64), new THREE.MeshBasicMaterial({ color: '#10002b', transparent: true, opacity: 0.45, depthWrite: false }));
+  shadow.rotation.x = -Math.PI / 2;
+  shadow.position.y = -0.35;
+  scene.add(shadow);
   const ring = new THREE.Mesh(new THREE.RingGeometry(0.17, 0.22, 32), new THREE.MeshBasicMaterial({ color: '#ffd60a', transparent: true, depthWrite: false, side: THREE.DoubleSide }));
   ring.rotation.x = -Math.PI / 2;
   ring.visible = false;
   board.add(ring);
-  // vitrina: el juguete buscado, inclinado hacia la cámara para verlo de lado
+  // vitrina: el juguete buscado sobre un pedestal, inclinado hacia la cámara para verlo de lado
   const showcase = new THREE.Group();
-  showcase.rotation.x = 0.95;
+  // la cámara mira desde arriba: se inclina hacia atrás para ver el juguete de 3/4
+  showcase.rotation.x = -0.9;
+  showcase.position.set(0, 0.25, -0.05);
   scene.add(showcase);
+  const ped = new THREE.Group();
+  showcase.add(ped);
+  const pedM = new THREE.MeshPhysicalMaterial({ color: '#ffffff', roughness: 0.3, clearcoat: 0.8 });
+  const p1 = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.48, 0.12, 48), pedM);
+  p1.position.y = 0.06; p1.castShadow = true; p1.receiveShadow = true;
+  ped.add(p1);
+  const p2 = new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.025, 10, 64), new THREE.MeshStandardMaterial({ color: '#ffd166', metalness: 0.7, roughness: 0.25 }));
+  p2.rotation.x = Math.PI / 2; p2.position.y = 0.12;
+  ped.add(p2);
+  const halo = new THREE.Mesh(new THREE.RingGeometry(0.5, 0.75, 64), new THREE.MeshBasicMaterial({ color: '#ffd60a', transparent: true, opacity: 0.25, depthWrite: false }));
+  halo.rotation.x = -Math.PI / 2; halo.position.y = 0.005;
+  showcase.add(halo);
+  const holder = new THREE.Group();
+  holder.position.y = 0.12;
+  showcase.add(holder);
+  const spinner = new THREE.Group();
+  holder.add(spinner);
 
   // Cada juguete (tipo + color) se arma una sola vez y luego se clona: las copias
   // comparten geometría y materiales, así no se acumula memoria ronda tras ronda.
@@ -387,7 +548,7 @@ function build3D(m, stage) {
     if (!dimMats.has(m)) { const d = m.clone(); d.transparent = true; d.opacity = 0.22; d.depthWrite = false; dimMats.set(m, d); }
     return dimMats.get(m);
   };
-  // pista: un círculo que marca la zona (no el lugar exacto) cuando quedan 4 s
+  // pista: un círculo que marca la zona (no el lugar exacto) cuando quedan 3 s
   const hint = new THREE.Mesh(new THREE.RingGeometry(0.42, 0.5, 48), new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
   hint.rotation.x = -Math.PI / 2;
   hint.position.y = 0.012;
@@ -398,22 +559,41 @@ function build3D(m, stage) {
   let R = null, started = false, spin = 0, revealT = -1, hintT = -1;
   const wrongT = new Map();
 
+  // Cámara: la más cercana con la que la mesa ENTERA (con el borde) cabe en
+  // pantalla, centrada. Se recalcula solo cuando cambia el tamaño.
+  const edge = [];
+  for (let i = 0; i < 36; i++) { const a = (i / 36) * Math.PI * 2; edge.push(new THREE.Vector3(Math.cos(a) * (TR + 0.06), 0.03, Math.sin(a) * (TR + 0.06))); }
+  const pv = new THREE.Vector3();
+  const cam = { a: 0, d: 5, oz: 0 };
+  const place = (d, oz) => { camera.position.set(0, d * 0.94, d * 0.36 + oz); camera.lookAt(0, 0, oz); camera.updateMatrixWorld(); };
+  const extent = () => { let mx = 0, lo = 9, hi = -9; for (const p of edge) { pv.copy(p).project(camera); mx = Math.max(mx, Math.abs(pv.x)); lo = Math.min(lo, pv.y); hi = Math.max(hi, pv.y); } return { mx, lo, hi }; };
   const fitCam = () => {
-    const vf = Math.tan((camera.fov * Math.PI) / 360);
-    const dist = Math.max(1.3 / (vf * S.aspect), 1.45 / vf);
-    camera.position.set(0, dist * 0.94, dist * 0.36);
-    camera.lookAt(0, 0, 0.04);
+    if (cam.a !== S.aspect) {
+      cam.a = S.aspect;
+      let lo = 1, hi = 30, oz = 0;
+      for (let it = 0; it < 22; it++) {
+        const d = (lo + hi) / 2;
+        for (let j = 0; j < 5; j++) { place(d, oz); const e = extent(); oz -= ((e.lo + e.hi) / 2) * d * 0.18; }
+        place(d, oz);
+        const e = extent();
+        if (e.mx <= 0.96 && e.lo >= -0.9 && e.hi <= 0.9) hi = d; else lo = d;
+      }
+      cam.d = hi;
+      for (let j = 0; j < 5; j++) { place(hi, oz); const e = extent(); oz -= ((e.lo + e.hi) / 2) * hi * 0.18; }
+      cam.oz = oz;
+    }
+    place(cam.d, cam.oz);
   };
   fitCam();
 
-  const clear = () => { for (const t of toys) board.remove(t); toys = []; showcase.clear(); };
+  const clear = () => { for (const t of toys) board.remove(t); toys = []; spinner.clear(); };
   S.start((dt, now) => {
     fitCam();
     if (!R) return;
     if (started && R.spin) { spin += R.spin * dt; board.rotation.y = spin; }
     // aparición de los juguetes
     toys.forEach((t, i) => {
-      const a = started ? Math.min(1, Math.max(0, (t.userData.age += dt) * 4 - i * 0.02)) : 0;
+      const a = started ? Math.min(1, Math.max(0, (t.userData.age += dt) * 4 - i * 0.012)) : 0;
       const base = t.userData.s;
       let sc = base * (a < 1 ? 1 - Math.pow(1 - a, 3) + Math.sin(a * Math.PI) * 0.25 : 1);
       if (i === R.target && revealT >= 0) sc = base * (1.3 + Math.sin((now - revealT) / 120) * 0.25);
@@ -423,7 +603,11 @@ function build3D(m, stage) {
       t.visible = started;
     });
     showcase.visible = !started;
-    if (!started) { showcase.rotation.y += dt * 1.6; showcase.position.y = 0.32 + Math.sin(now / 300) * 0.03; }
+    if (!started) {
+      spinner.rotation.y += dt * 1.4;
+      spinner.position.y = 0.06 + Math.sin(now / 300) * 0.03;
+      halo.material.opacity = 0.2 + Math.sin(now / 250) * 0.08;
+    }
     if (ring.visible) { ring.scale.setScalar(1 + Math.sin(now / 150) * 0.15); }
     hint.visible = hintT >= 0 && revealT < 0;
     if (hint.visible) { const a = Math.min(1, (now - hintT) / 600); hint.material.opacity = a * (0.45 + Math.sin(now / 200) * 0.25); hint.scale.setScalar(1.6 - a * 0.6); }
@@ -451,15 +635,15 @@ function build3D(m, stage) {
         const t = toyOf(it.kind, it.col);
         t.position.set(it.x, 0, it.z);
         t.rotation.y = it.rot;
-        // más grandes cuando hay pocos (rondas 1-2), más chicos cuando la mesa está llena
-        t.userData = { idx: i, s: it.s * (1.75 - R.items.length * 0.011), age: 0 };
+        // más grandes cuando hay pocos, más chicos cuando la mesa está llena
+        t.userData = { idx: i, s: it.s * R.size, age: 0 };
         board.add(t);
         return t;
       });
       const tg = R.items[R.target];
       const big = toyOf(tg.kind, tg.col);
-      big.scale.setScalar(3.2);
-      showcase.add(big);
+      big.scale.setScalar(3.4);
+      spinner.add(big);
     },
     go() { started = true; toys.forEach((t) => { t.userData.age = 0; }); particles.burst(0, 0.3, 0, { n: 30, color: ['#ffffff', '#ffd60a'], speed: 1, up: 0.8, size: 0.04, life: 0.6, gravity: 1 }); },
     tick() {},
@@ -469,9 +653,9 @@ function build3D(m, stage) {
       let o = hit;
       while (o && o.userData.idx === undefined) o = o.parent;
       const idx = o ? o.userData.idx : null;
-      // perdonar un toque cerca del buscado (en el celular los juguetes son chicos)
+      // perdonar un toque muy cerca del buscado (en el celular los juguetes son chicos)
       const [sx, sy] = screenOf(R.target);
-      if (Math.hypot(sx - x, sy - y) < 26) return R.target;
+      if (Math.hypot(sx - x, sy - y) < 18) return R.target;
       return idx;
     },
     found(i) {
@@ -523,7 +707,7 @@ function build2D(canvas, stage) {
   const ro = new ResizeObserver(fit);
   ro.observe(stage);
   let R = null, started = false, el = 0, revealIdx = -1, foundIdx = -1, hintIdx = -1, raf = 0;
-  const sc = () => Math.min(W / 2.1, H / 2.6);
+  const sc = () => Math.min(W, H) / (2 * (TR + 0.12));
   const P = (x, z) => [W / 2 + x * sc(), H / 2 + z * sc()];
   const shape = (kind, color, x, y, r) => {
     g.fillStyle = color; g.strokeStyle = '#1b1035'; g.lineWidth = 2;
@@ -535,7 +719,11 @@ function build2D(canvas, stage) {
     else if (kind === 'heart') { g.moveTo(x, y + r); g.bezierCurveTo(x - r * 1.6, y - r * 0.2, x - r * 0.6, y - r * 1.3, x, y - r * 0.4); g.bezierCurveTo(x + r * 0.6, y - r * 1.3, x + r * 1.6, y - r * 0.2, x, y + r); }
     else if (kind === 'donut') { g.arc(x, y, r, 0, Math.PI * 2); g.moveTo(x + r * 0.45, y); g.arc(x, y, r * 0.45, 0, Math.PI * 2, true); }
     else if (kind === 'mush') { g.arc(x, y, r, Math.PI, 0); g.closePath(); }
-    g.fill('evenodd'); g.stroke();
+    else if (kind === 'bear') { g.arc(x, y + r * 0.3, r * 0.75, 0, Math.PI * 2); g.moveTo(x + r * 0.6, y - r * 0.5); g.arc(x, y - r * 0.5, r * 0.6, 0, Math.PI * 2); g.moveTo(x - r * 0.3, y - r * 1.05); g.arc(x - r * 0.5, y - r * 1.05, r * 0.22, 0, Math.PI * 2); g.moveTo(x + r * 0.72, y - r * 1.05); g.arc(x + r * 0.5, y - r * 1.05, r * 0.22, 0, Math.PI * 2); }
+    else if (kind === 'rocket') { g.moveTo(x + r * 1.3, y); g.lineTo(x + r * 0.5, y - r * 0.5); g.lineTo(x - r, y - r * 0.5); g.lineTo(x - r * 1.3, y - r * 0.9); g.lineTo(x - r * 1.1, y); g.lineTo(x - r * 1.3, y + r * 0.9); g.lineTo(x - r, y + r * 0.5); g.lineTo(x + r * 0.5, y + r * 0.5); g.closePath(); }
+    g.fill(kind === 'donut' ? 'evenodd' : 'nonzero'); g.stroke();
+    if (kind === 'rocket') { g.fillStyle = '#caf0f8'; g.beginPath(); g.arc(x + r * 0.1, y, r * 0.25, 0, Math.PI * 2); g.fill(); g.stroke(); }
+    if (kind === 'cube') { g.fillStyle = color; for (const [dx, dy] of [[-0.45, -0.45], [0.45, -0.45], [-0.45, 0.45], [0.45, 0.45]]) { g.beginPath(); g.arc(x + dx * r, y + dy * r, r * 0.25, 0, Math.PI * 2); g.fill(); g.stroke(); } }
     if (kind === 'duck') { g.beginPath(); g.arc(x + r * 0.6, y - r * 0.6, r * 0.55, 0, Math.PI * 2); g.fill(); g.stroke(); g.fillStyle = '#fb8500'; g.fillRect(x + r * 1.05, y - r * 0.7, r * 0.5, r * 0.25); }
     if (kind === 'mush') { g.fillStyle = '#fff'; g.fillRect(x - r * 0.3, y, r * 0.6, r * 0.7); g.strokeRect(x - r * 0.3, y, r * 0.6, r * 0.7); }
     if (kind === 'car') { g.fillStyle = '#2b2d42'; g.beginPath(); g.arc(x - r * 0.6, y + r * 0.6, r * 0.3, 0, Math.PI * 2); g.arc(x + r * 0.6, y + r * 0.6, r * 0.3, 0, Math.PI * 2); g.fill(); }
@@ -543,8 +731,10 @@ function build2D(canvas, stage) {
   const draw = (now) => {
     g.fillStyle = '#5a189a'; g.fillRect(0, 0, W, H);
     if (R) {
-      g.fillStyle = '#c68b59'; g.beginPath(); g.ellipse(W / 2, H / 2, 1.15 * sc(), 1.35 * sc(), 0, 0, Math.PI * 2); g.fill();
-      const r = sc() * 0.09;
+      g.fillStyle = '#7f4f24'; g.beginPath(); g.arc(W / 2, H / 2, (TR + 0.05) * sc(), 0, Math.PI * 2); g.fill();
+      g.fillStyle = '#b07446'; g.beginPath(); g.arc(W / 2, H / 2, TR * sc(), 0, Math.PI * 2); g.fill();
+      g.strokeStyle = '#ffd166'; g.lineWidth = 2; g.beginPath(); g.arc(W / 2, H / 2, (TR - 0.09) * sc(), 0, Math.PI * 2); g.stroke();
+      const r = sc() * 0.075 * R.size;
       if (!started) { const t = R.items[R.target]; shape(t.kind, COLS[t.col].c, W / 2, H / 2, r * 3.5); }
       else R.items.forEach((it, i) => {
         const [x, y] = P(it.x, it.z);
@@ -567,7 +757,7 @@ function build2D(canvas, stage) {
       if (!started || !R) return null;
       const rc = canvas.getBoundingClientRect();
       const x = cx - rc.left, y = cy - rc.top;
-      let best = null, bd = sc() * 0.16;
+      let best = null, bd = sc() * 0.13 * R.size;
       R.items.forEach((it, i) => { const [px, py] = P(it.x, it.z); const d = Math.hypot(px - x, py - y) - (i === R.target ? 8 : 0); if (d < bd) { bd = d; best = i; } });
       return best;
     },

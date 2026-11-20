@@ -16,6 +16,7 @@ compiten ronda tras ronda por estrellas ⭐.
 | 🔢 | Cuenta rápida *(3D)* | Llueven objetos 3D sobre un carrusel: cuenta los pedidos y responde rápido |
 | 🧠 | Simón dice *(3D)* | 3 rondas cada vez más difíciles (4→6 botones, 4→7 pasos, la última gira) |
 | ⏱️ | Para en… *(3D)* | 3 rondas: detén el cronómetro gigante en el segundo pedido (1–10) |
+| 🎈 | Gallina *(3D)* | 3 rondas: un globo se infla y su premio sube; plántate antes de que explote. El último en plantarse gana el doble |
 | 🐙 | Kraken en cubierta *(tiempo real)* | Saltar los tentáculos que giran en el barco; sobrevivir más |
 | 💣 | Lluvia de bombas *(tiempo real)* | Esquivar bombas, cajas que caen y barriles que ruedan (se saltan); 3 vidas |
 | 🟩 | Pisa el color *(tiempo real)* | Pararse en el color anunciado antes de que el piso se caiga |

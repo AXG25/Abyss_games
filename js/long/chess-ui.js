@@ -139,7 +139,8 @@ export function mountChess(el, ctx) {
   levelEl.onclick = (e) => { const b = e.target.closest('[data-lv]'); if (b && lg && b.dataset.lv !== lg.lvl) { sfx.click(); send({ t: 'level', v: b.dataset.lv }, false); } };
   // pista: la mejor jugada que encuentra el mismo motor del bot (pensando poco)
   hintBtn.onclick = () => {
-    if (!myTurn() || busy()) return;
+    // la pista es solo para jugar contra el bot
+    if (!myTurn() || busy() || !player(rival()).b) return;
     const m = bestMove(pos, 2, () => 0, 400);
     if (!m) return;
     hint = { f: m.f, t: m.t };
@@ -219,7 +220,8 @@ export function mountChess(el, ctx) {
       d.classList.toggle('dot', dests.has(i) && p === '.');
       d.classList.toggle('hit', dests.has(i) && p !== '.');
       d.classList.toggle('can', movable.has(i));
-      d.classList.toggle('hint', !!hint && myTurn() && (hint.f === i || hint.t === i));
+      // (no se llama 'hint': esa clase ya existe para textos y movía las casillas)
+      d.classList.toggle('cz-tip', !!hint && myTurn() && (hint.f === i || hint.t === i));
       let pc = d.querySelector('.cz-p');
       const want = p === '.' ? '' : p;
       if ((pc ? pc.dataset.k : '') !== want) {
